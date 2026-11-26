@@ -1,0 +1,74 @@
+name: IVNM Kitten targeted diagnostics
+on:
+  push:
+    branches: [main]
+    paths: ['casting/kitten_rescue.py', '.github/workflows/kitten-targeted.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  rescue:
+    name: CA-T-F-02 missing line only
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CUDA_VISIBLE_DEVICES: ''
+      OMP_NUM_THREADS: '4'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15140303183'
+          run-id: '45864625148'
+          github-token: ${{ github.token }}
+          path: out
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15131289961'
+          run-id: '45844095394'
+          github-token: ${{ github.token }}
+          path: refs
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install kittenml soundfile --extra-index-url https://download.pytorch.org/whl/cpu
+          python -u casting/kitten_rescue.py rescue
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: kitten-CA-T-F-targeted-${{ github.run_id }}
+          path: out/
+          retention-days: 14
+  cpp-smoke:
+    name: Kitten C++ neutral and emotional router probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CUDA_VISIBLE_DEVICES: ''
+      OMP_NUM_THREADS: '4'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install kitten_tts_cpp==0.2.0 soundfile
+          python -u casting/kitten_rescue.py cpp
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: kitten-cpp-probe-${{ github.run_id }}
+          path: out/
+          retention-days: 14
