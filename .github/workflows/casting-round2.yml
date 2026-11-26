@@ -1,0 +1,60 @@
+name: IVNM Casting Round 2 - Chatterbox
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['casting/round2.py', '.github/workflows/casting-round2.yml']
+permissions:
+  contents: read
+jobs:
+  audition:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        category: [UK-C-M, UK-C-F, UK-T-M, UK-T-F, UK-A-M, UK-A-F, CA-C-M, CA-C-F, CA-T-M, CA-T-F, CA-A-M, CA-A-F]
+    env:
+      CUDA_VISIBLE_DEVICES: ''
+      OMP_NUM_THREADS: '4'
+      MKL_NUM_THREADS: '4'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Prepare audio tools and Qwen reference designer
+        run: |
+          mkdir -p out
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg sox
+          python -m venv /tmp/ivnm-design
+          /tmp/ivnm-design/bin/python -m pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-design/bin/python -m pip install qwen-tts soundfile
+          /tmp/ivnm-design/bin/python -m pip freeze > out/design-dependencies.txt
+      - name: Create two synthetic reference voices
+        run: |
+          /tmp/ivnm-design/bin/python -m py_compile casting/round2.py
+          /tmp/ivnm-design/bin/python -u casting/round2.py design "${{ matrix.category }}"
+      - name: Prepare Chatterbox in separate environment
+        if: ${{ !cancelled() && hashFiles('out/*-ref.wav') != '' }}
+        run: |
+          rm -rf /tmp/ivnm-design
+          python -m venv /tmp/ivnm-chatter
+          /tmp/ivnm-chatter/bin/python -m pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-chatter/bin/python -m pip install chatterbox-tts==0.1.7 soundfile --extra-index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-chatter/bin/python -m pip freeze > out/chatter-dependencies.txt
+      - name: Audition both voices with Chatterbox Turbo
+        if: ${{ !cancelled() && hashFiles('out/*-ref.wav') != '' }}
+        run: /tmp/ivnm-chatter/bin/python -u casting/round2.py chatterbox "${{ matrix.category }}"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: round2-${{ matrix.category }}-${{ github.run_id }}
+          path: out/
+          retention-days: 14
+          if-no-files-found: warn
