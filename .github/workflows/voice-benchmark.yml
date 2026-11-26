@@ -1,0 +1,88 @@
+name: IVNM Voice - quality benchmark
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['voice/**', '.github/workflows/voice-benchmark.yml']
+permissions:
+  contents: read
+concurrency:
+  group: voice-benchmark
+  cancel-in-progress: true
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [pocket, kitten, chatterbox]
+    env:
+      ENGINE: ${{ matrix.engine }}
+      OMP_NUM_THREADS: '4'
+      MKL_NUM_THREADS: '4'
+      CUDA_VISIBLE_DEVICES: ''
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install FFmpeg and model dependencies
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version
+          case "$ENGINE" in
+            pocket)
+              python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+              python -m pip install pocket-tts==4.0.1 soundfile
+              ;;
+            kitten)
+              python -m pip install kitten_tts_cpp soundfile numpy
+              ;;
+            chatterbox)
+              python -m pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+              python -m pip install chatterbox-tts==0.1.7 soundfile --extra-index-url https://download.pytorch.org/whl/cpu
+              ;;
+          esac
+          python -m pip freeze > out/dependencies.txt
+      - name: Generate and master synthetic lesson recordings
+        run: |
+          python -m py_compile voice/benchmark.py
+          python -u voice/benchmark.py
+      - name: Evaluate intelligibility
+        if: success()
+        run: |
+          python -m pip install faster-whisper jiwer
+          python - <<'PY'
+          import json, pathlib, re
+          from faster_whisper import WhisperModel
+          from jiwer import wer
+          out = pathlib.Path('out')
+          report = json.loads((out/'report.json').read_text())
+          model = WhisperModel('small.en', device='cpu', compute_type='int8', cpu_threads=4)
+          def norm(s):
+              return ' '.join(re.findall(r"[a-z0-9]+(?:'[a-z]+)?", s.lower()))
+          for name, track in report['tracks'].items():
+              if 'script' not in track: continue
+              text = ' '.join(x['text'] for x in track['script'])
+              segments, info = model.transcribe(str(out/(name+'.mp3')), language='en', beam_size=5, condition_on_previous_text=False)
+              transcript = ' '.join(s.text.strip() for s in segments)
+              track['asr_transcript'] = transcript
+              track['wer_raw'] = round(wer(norm(text), norm(transcript)), 4)
+              track['review'] = 'manual listening required; ASR score is diagnostic, not accent or naturalness approval'
+          (out/'report.json').write_text(json.dumps(report,indent=2))
+          PY
+      - name: Archive recordings and QA report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: voice-${{ matrix.engine }}-${{ github.run_id }}
+          path: out/
+          retention-days: 7
+          if-no-files-found: warn
