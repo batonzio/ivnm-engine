@@ -1,8 +1,5 @@
 name: IVNM end-to-end voice pipeline
 on:
-  push:
-    branches: [main]
-    paths: ['production/**', '.github/workflows/production-voice.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -74,4 +71,5 @@ jobs:
             out/*.json
             out/audio/
             out/takes/
+            out/cleaned/
           retention-days: 14

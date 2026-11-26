@@ -1,0 +1,71 @@
+name: IVNM postprocessing - existing takes regression
+on:
+  push:
+    branches: [main]
+    paths: ['postprocess/**', 'production/pipeline.py', '.github/workflows/postprocess-regression.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OMP_NUM_THREADS: '4'
+      CUDA_VISIBLE_DEVICES: ''
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15142303233'
+          run-id: '45869865602'
+          github-token: ${{ github.token }}
+          path: out
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15139756016'
+          run-id: '45862558689'
+          github-token: ${{ github.token }}
+          path: refs
+      - name: Install local audio and speaker QA tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install faster-whisper speechbrain==1.0.3 numpy soundfile 'huggingface_hub<1.0'
+      - name: Unit tests for trimming, repetition and mastered peak
+        run: python -m unittest discover -s postprocess -p 'test_*.py' -v
+      - name: Reprocess verified existing dialogue, without TTS
+        run: |
+          python - <<'PY'
+          import json,pathlib,hashlib
+          for p in pathlib.Path("out").glob("synth-*.json"):
+              records=json.loads(p.read_text())
+              for r in records:
+                  v=r["voice"]
+                  if v.get("reference_file"):
+                      ref=pathlib.Path("refs")/pathlib.Path(v["reference_file"]).name
+                      assert hashlib.sha256(ref.read_bytes()).hexdigest()==v["reference_sha256"]
+                      v["reference_file"]=str(ref.resolve())
+              p.write_text(json.dumps(records))
+          PY
+          find out/takes -name '*.wav' ! -name '*-pcm.wav' -print0 | sort -z | xargs -0 sha256sum > out/original-takes.sha256
+          python -u production/pipeline.py judge
+          sha256sum -c out/original-takes.sha256
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: postprocessed-dialogue-${{ github.run_id }}
+          path: |
+            out/*.json
+            out/*.sha256
+            out/audio/
+            out/cleaned/
+          retention-days: 14

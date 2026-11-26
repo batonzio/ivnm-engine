@@ -5,6 +5,8 @@ import soundfile as sf
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"audio-qa"))
 from quality import signal,select
+sys.path.insert(0,str(ROOT/"postprocess"))
+from mastering import cleanup,master,repetition_report
 def load_module(name,path):
     spec=importlib.util.spec_from_file_location(name,path)
     m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);return m
@@ -135,11 +137,17 @@ def judge(args):
         p=out/("synth-"+engine+".json")
         if not p.is_file():raise RuntimeError("Missing synthesis result "+engine)
         records.extend(read(p))
-    references={};selected={};report={"tracks":[],"speaker_model":"ECAPA-TDNN VoxCeleb; similarities are diagnostic, not calibrated identity decisions","publication_allowed":False}
+    references={};selected={};report={"postprocess_version":"1.0","tracks":[],"speaker_model":"ECAPA-TDNN VoxCeleb; similarities are diagnostic, not calibrated identity decisions","publication_allowed":False}
     audio=out/"audio";audio.mkdir(exist_ok=True);failed=False
+    cleaned=out/"cleaned";cleaned.mkdir(exist_ok=True)
+    def transcribe(path):
+        seg,_=asr.transcribe(str(path),language="en",beam_size=5,temperature=0,condition_on_previous_text=False,word_timestamps=True)
+        seg=list(seg)
+        return " ".join(s.text.strip() for s in seg),[{"word":w.word.strip(),"start":w.start,"end":w.end} for s in seg for w in (s.words or [])]
     for t in plan["tracks"]:
         track={"id":t["id"],"lesson":t["lesson"],"slide":t["slide"],"lines":[],"status":"failed"}
         pieces=[];vectors=[];complete=True
+        for suffix in (".wav",".mp3",".premaster.wav"):(audio/(t["id"]+suffix)).unlink(missing_ok=True)
         for i,line in enumerate(t["lines"]):
             candidates=[c for c in records if c["track"]==t["id"] and c["index"]==i]
             for c in candidates:
@@ -148,8 +156,12 @@ def judge(args):
                     p=out/"takes"/c["file"]
                     if sha(p)!=c["sha256"]:raise ValueError("Take checksum mismatch")
                     wave,sr=sf.read(p,dtype="float32")
-                    seg,_=asr.transcribe(str(p),language="en",beam_size=5,temperature=0,condition_on_previous_text=False)
-                    c["qa"]=evaluate(wave,sr,line["text"]," ".join(s.text.strip() for s in seg))
+                    transcript,words=transcribe(p)
+                    c["qa"]=evaluate(wave,sr,line["text"],transcript)
+                    c["fluency"]=repetition_report(line["text"],transcript,words)
+                    if c["fluency"]["unexpected_repetitions"] and c["qa"]["lexical"]["errors"]:
+                        c["qa"]["passed"]=False
+                        c["qa"]["reasons"].append("Unexpected spoken repetition; reject rather than cut phonemes")
                     if c["qa"]["passed"]:
                         v=embedding(p)
                         ref=c["voice"].get("reference_file")
@@ -158,12 +170,32 @@ def judge(args):
                             if key not in references:references[key]=embedding(pathlib.Path(ref))
                             c["reference_cosine"]=float(v@references[key])
                 except Exception as exc:c["qa"]={"passed":False,"reasons":[repr(exc)]}
-            winner=select(candidates)
+            # Rank only raw passing takes. Clean the winner; if cleaning damages
+            # speech, try the next already-generated passing take.
+            winner=None;cleanpath=None
+            while True:
+                trial=select(candidates)
+                if trial is None:break
+                try:
+                    original=out/"takes"/trial["file"]
+                    dest=cleaned/(trial["id"]+".wav")
+                    post=cleanup(original,dest)
+                    wave,sr=sf.read(dest,dtype="float32")
+                    transcript,words=transcribe(dest)
+                    after=evaluate(wave,sr,line["text"],transcript)
+                    trial["postprocess"]={**post,"qa":after,"fluency":repetition_report(line["text"],transcript,words)}
+                    if not after["passed"]:raise ValueError("Cleaned transcript/signal failed")
+                    trial["postprocess"]["raw_to_cleaned_cosine"]=float(embedding(original)@embedding(dest))
+                    trial["postprocess"]["sha256"]=sha(dest)
+                    winner=trial;cleanpath=dest;break
+                except Exception as exc:
+                    trial.setdefault("postprocess",{})["error"]=repr(exc)
+                    trial["qa"]["passed"]=False
+                    trial["qa"]["reasons"].append("Postprocessing failed; try next take")
             detail={"speaker":line["speaker"],"voice_key":line["voice_key"],"text":line["text"],"direction":line["direction"],"emotion":line["emotion"],"emphasis":line["emphasis"],"takes":candidates,"selected_seed":winner["seed"] if winner else None}
             if winner:
-                p=out/"takes"/winner["file"];pcm=out/"takes"/(winner["id"]+"-pcm.wav")
-                ff("-i",p,"-ar",24000,"-ac",1,pcm)
-                wave,_=sf.read(pcm,dtype="float32");pieces.append(wave)
+                p=cleanpath
+                wave,_=sf.read(p,dtype="float32");pieces.append(wave)
                 if i+1<len(t["lines"]):pieces.append(np.zeros(round(24000*line["pause_after_ms"]/1000),dtype=np.float32))
                 vectors.append((i,line["speaker"],embedding(p)))
             else:complete=False
@@ -171,9 +203,14 @@ def judge(args):
         track["speaker_similarity"]=[{"lines":[a[0],b[0]],"same_expected_speaker":a[1]==b[1],"cosine":float(a[2]@b[2])} for j,a in enumerate(vectors) for b in vectors[j+1:]]
         if complete:
             wav=audio/(t["id"]+".wav");mp3=audio/(t["id"]+".mp3")
-            sf.write(wav,np.concatenate(pieces),24000,subtype="PCM_24")
-            ff("-i",wav,"-af","loudnorm=I=-18:TP=-2:LRA=7","-ar",24000,"-c:a","libmp3lame","-b:a","128k",mp3)
-            track.update(status="technical_pass_pending_listening",file="audio/"+mp3.name,sha256=sha(mp3),seconds=sf.info(wav).duration)
+            premaster=audio/(t["id"]+".premaster.wav")
+            sf.write(premaster,np.concatenate(pieces),24000,subtype="PCM_24")
+            try:
+                track["mastering"]=master(premaster,wav,mp3)
+                track.update(status="technical_pass_pending_listening",file="audio/"+mp3.name,sha256=sha(mp3),seconds=sf.info(wav).duration)
+            except Exception as exc:
+                track["mastering_error"]=repr(exc);failed=True
+                wav.unlink(missing_ok=True);mp3.unlink(missing_ok=True)
         else:failed=True
         report["tracks"].append(track);write(out/"qa-report.json",report)
     manifest.update(status="blocked" if failed else "technical_pass_pending_listening",tracks=[{k:t[k] for k in ("id","lesson","slide","status","file","sha256","seconds") if k in t} for t in report["tracks"]],qa_sha256=sha(out/"qa-report.json"))
