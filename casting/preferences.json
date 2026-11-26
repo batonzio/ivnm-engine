@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "status": "provisional_user_preference",
+  "engine_by_gender": {
+    "male": "chatterbox",
+    "female": "pocket"
+  },
+  "variant_by_candidate": {
+    "01": "primary",
+    "02": "alternate"
+  },
+  "source_artifact": 15142281688,
+  "source_run": 45869947186,
+  "individual_accent_age_approval": false,
+  "allow_production_publish": false,
+  "notes": "User preferred these engines in general after audition; individual voices and variant order are provisional. No per-voice checkbox approval inferred."
+}
