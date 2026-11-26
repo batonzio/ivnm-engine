@@ -1,0 +1,54 @@
+name: IVNM Voice Bank listening pack
+on:
+  push:
+    branches: [main]
+    paths: ['casting/review_pack.py', '.github/workflows/voice-review-pack.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15132525575,15132049719,15131980949,15131893410,15131497254,15131289961,15130979471,15130731556,15130274305,15130023359,15129969241'
+          run-id: '45844095394'
+          github-token: ${{ github.token }}
+          path: review-input/chatterbox
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15139756016'
+          run-id: '45862558689'
+          github-token: ${{ github.token }}
+          path: review-input/repaired
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: 'compare-pocket-*'
+          run-id: '45864006478'
+          github-token: ${{ github.token }}
+          path: review-input/pocket
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: 'compare-kitten-*'
+          run-id: '45850434632'
+          github-token: ${{ github.token }}
+          path: review-input/kitten
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15140591116,15140303183,15140053729,15139513404,15139482932'
+          run-id: '45864625148'
+          github-token: ${{ github.token }}
+          path: review-input/kitten-repaired
+      - name: Assemble listening page and exportable approval registry
+        run: python casting/review_pack.py
+      - uses: actions/upload-artifact@v6
+        with:
+          name: IVNM-Voice-Bank-listening-pack
+          path: review/
+          retention-days: 30
