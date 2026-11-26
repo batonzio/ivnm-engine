@@ -1,0 +1,67 @@
+name: IVNM Kitten casting - recover failed candidates
+on:
+  push:
+    branches: [main]
+    paths: ['casting/repair_kitten.py', '.github/workflows/casting-kitten-repair.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        category: [UK-C-M, UK-A-M, UK-A-F, CA-C-M, CA-T-M, CA-T-F, CA-A-M]
+    env:
+      CUDA_VISIBLE_DEVICES: ''
+      OMP_NUM_THREADS: '4'
+      MKL_NUM_THREADS: '4'
+      CATEGORY: ${{ matrix.category }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v5
+        with:
+          name: compare-kitten-${{ matrix.category }}-45850434632
+          run-id: '45850434632'
+          github-token: ${{ github.token }}
+          path: out
+      - uses: actions/download-artifact@v5
+        if: matrix.category != 'CA-A-M'
+        with:
+          name: round2-${{ matrix.category }}-45844095394
+          run-id: '45844095394'
+          github-token: ${{ github.token }}
+          path: refs
+      - uses: actions/download-artifact@v5
+        if: matrix.category == 'CA-A-M'
+        with:
+          artifact-ids: '15139756016'
+          run-id: '45862558689'
+          github-token: ${{ github.token }}
+          path: refs
+      - name: Install CPU runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install kittenml soundfile --extra-index-url https://download.pytorch.org/whl/cpu
+          python -m pip freeze > out/repair-dependencies.txt
+      - name: Resume invalid recordings only
+        run: |
+          python -m py_compile casting/repair_kitten.py
+          python -u casting/repair_kitten.py "$CATEGORY"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: repaired-kitten-${{ matrix.category }}-${{ github.run_id }}
+          path: out/
+          retention-days: 14
