@@ -1,0 +1,59 @@
+name: IVNM Repair CA-A-M only
+on:
+  push:
+    branches: [main]
+    paths: ['casting/repair_ca_am.py', '.github/workflows/repair-ca-am.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  repair:
+    name: Repair CA-A-M-01 only
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CUDA_VISIBLE_DEVICES: ''
+      OMP_NUM_THREADS: '4'
+      MKL_NUM_THREADS: '4'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15133351616'
+          run-id: '45844095394'
+          github-token: ${{ github.token }}
+          path: out
+      - name: Install reference designer
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg sox
+          python -m venv /tmp/ivnm-design
+          /tmp/ivnm-design/bin/python -m pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-design/bin/python -m pip install qwen-tts soundfile
+      - name: Repair short reference with duration gate
+        run: |
+          /tmp/ivnm-design/bin/python -m py_compile casting/repair_ca_am.py
+          /tmp/ivnm-design/bin/python -u casting/repair_ca_am.py design
+      - name: Prepare Chatterbox
+        run: |
+          rm -rf /tmp/ivnm-design
+          python -m venv /tmp/ivnm-chatter
+          /tmp/ivnm-chatter/bin/python -m pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-chatter/bin/python -m pip install chatterbox-tts==0.1.7 soundfile --extra-index-url https://download.pytorch.org/whl/cpu
+      - name: Generate missing first candidate only
+        run: |
+          /tmp/ivnm-chatter/bin/python -u casting/repair_ca_am.py chatterbox
+          /tmp/ivnm-chatter/bin/python -u casting/repair_ca_am.py verify
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: repaired-CA-A-M-${{ github.run_id }}
+          path: out/
+          retention-days: 14
