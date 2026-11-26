@@ -1,48 +1,16 @@
-name: IVNM Voice Casting - synthetic actors
+name: IVNM Voice Casting - retired VoxCPM2 policy check
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['casting/**', '.github/workflows/voice-casting.yml']
 permissions:
   contents: read
 jobs:
-  audition:
+  policy:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        category: [UK-C-M, UK-C-F, UK-T-M, UK-T-F, UK-A-M, UK-A-F, CA-C-M, CA-C-F, CA-T-M, CA-T-F, CA-A-M, CA-A-F]
-    env:
-      CUDA_VISIBLE_DEVICES: ''
-      OMP_NUM_THREADS: '4'
-      MKL_NUM_THREADS: '4'
-      HF_HUB_DISABLE_TELEMETRY: '1'
+    timeout-minutes: 2
     steps:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-      - name: Install CPU model
+      - name: Confirm VoxCPM2 is excluded
         run: |
-          mkdir -p out
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
-          python -m pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install 'torchcodec==0.2' 'transformers<5' 'git+https://github.com/OpenBMB/VoxCPM.git@300e4260b509066151d623dc9c0aa922cf82232b'
-          python -m pip freeze > out/dependencies.txt
-      - name: Generate and verify voice reference and reaction
-        run: |
-          python -m py_compile casting/audition.py
-          python -u casting/audition.py "${{ matrix.category }}"
-      - uses: actions/upload-artifact@v6
-        if: always()
-        with:
-          name: casting-${{ matrix.category }}-${{ github.run_id }}
-          path: out/
-          retention-days: 14
-          if-no-files-found: warn
+          python -c "import json; p=json.load(open('voice/presets.json')); assert p['model_review']['voxcpm2']['status']=='rejected' and not p['capabilities']['voxcpm2']['enabled']"

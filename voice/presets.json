@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "defaults": {
     "speed": 1,
     "quality": "studio",
@@ -81,6 +81,11 @@
       "native_direction": true,
       "verified_accent": false,
       "enabled": false
+    },
+    "voxcpm2": {
+      "native_direction": true,
+      "verified_accent": false,
+      "enabled": false
     }
   },
   "rejected_voices": {
@@ -105,5 +110,24 @@
     "chatterbox": [
       "charles_vctk"
     ]
+  },
+  "model_review": {
+    "pocket": {
+      "status": "candidate",
+      "feedback": "Positive user listening feedback for benchmark round 2"
+    },
+    "kitten": {
+      "status": "candidate",
+      "feedback": "Positive user listening feedback for benchmark round 2"
+    },
+    "chatterbox": {
+      "status": "candidate",
+      "feedback": "Positive user listening feedback for benchmark round 2"
+    },
+    "voxcpm2": {
+      "status": "rejected",
+      "feedback": "User rejected sound quality after casting round 1",
+      "allow_fallback": false
+    }
   }
 }

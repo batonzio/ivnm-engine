@@ -3,6 +3,7 @@ import argparse, json, pathlib, time, subprocess
 import numpy as np
 import soundfile as sf
 import torch
+raise SystemExit("VoxCPM2 retired by listening review; historical source retained")
 from voxcpm import VoxCPM
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 BANK=json.loads((ROOT/"voice/voice-bank.json").read_text())

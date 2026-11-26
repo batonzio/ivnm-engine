@@ -8,3 +8,6 @@ Pocket Marius is rejected by listening review. The former Kitten second voice Br
 
 ## Voice bank v1
 12 mandatory categories (British/Canadian × child/teen/adult × male/female), two desired approved variants per category. See voice-bank.json. All initial slots are pending real audition; this is a requirement registry, not a claim of 24 available voices. No real minor reference may be used without appropriate permission and rights; prefer synthetic age-appropriate voices.
+
+## Listening review — round 1
+VoxCPM2 rejected on user listening feedback, even though the CPU tests passed. No production, fallback or further automatic casting. Retain Pocket, KittenTTS 2 and Chatterbox as candidates; the favorable overall feedback does not certify individual accent/age categories or approve all voices. The MD-first Pocket adapter remains the only integrated renderer. Keep the 12-category target and do not substitute accents or ages.
