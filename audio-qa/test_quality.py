@@ -9,6 +9,14 @@ class QualityTests(unittest.TestCase):
         self.assertEqual(edits("twenty-five minutes","25 minutes")["errors"],0)
         self.assertNotEqual(edits("half past ten","half past 11")["errors"],0)
         self.assertNotEqual(edits("seven","07")["errors"],0)
+    def test_british_spelling(self):
+        self.assertEqual(edits("I'm usually organised","I'm usually organized")["errors"],0)
+        self.assertEqual(edits("My favourite colour is grey","My favorite color is gray")["errors"],0)
+        self.assertEqual(edits("We travelled to the town centre","We traveled to the town center")["errors"],0)
+        self.assertNotEqual(edits("I am organised","I am organising")["errors"],0)
+        self.assertNotEqual(edits("I went to the centre","I went to the cinema")["errors"],0)
+        self.assertNotEqual(edits("I am quite creative","I am quiet creative")["errors"],0)
+        self.assertNotEqual(edits("I feel well","I feel while")["errors"],0)
     def test_missing_and_added(self):
         self.assertEqual(edits("one two three","one three")["deletions"],1)
         self.assertEqual(edits("one two","one two three")["insertions"],1)

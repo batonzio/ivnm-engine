@@ -11,11 +11,34 @@ def number_tokens(word):
     if n<20: return [ONES[n]]
     return [TENS[n//10]]+([ONES[n%10]] if n%10 else [])
 
+# Explicit spelling equivalents only: do not replace whole suffixes or accept
+# similar-sounding but different words. Accent itself is not an ASR metric.
+SPELLINGS={}
+for uk,us in [
+    ("organise","organize"),("recognise","recognize"),("realise","realize"),
+    ("apologise","apologize"),("memorise","memorize"),("specialise","specialize"),
+    ("civilise","civilize"),("analyse","analyze"),("paralyse","paralyze")]:
+    for a,b in ((uk,us),(uk+"d",us+"d"),(uk+"s",us+"s"),(uk[:-1]+"ing",us[:-1]+"ing")):SPELLINGS[a]=b
+for uk,us in [
+    ("colour","color"),("colours","colors"),("coloured","colored"),("colouring","coloring"),
+    ("favour","favor"),("favours","favors"),("favourite","favorite"),("favourites","favorites"),
+    ("neighbour","neighbor"),("neighbours","neighbors"),("neighbourhood","neighborhood"),
+    ("centre","center"),("centres","centers"),("theatre","theater"),("theatres","theaters"),
+    ("metre","meter"),("metres","meters"),("litre","liter"),("litres","liters"),
+    ("travelled","traveled"),("travelling","traveling"),("traveller","traveler"),("travellers","travelers"),
+    ("cancelled","canceled"),("cancelling","canceling"),("labelled","labeled"),("labelling","labeling"),
+    ("organisation","organization"),("organisations","organizations"),
+    ("behaviour","behavior"),("behaviours","behaviors"),("honour","honor"),
+    ("humour","humor"),("labour","labor"),("flavour","flavor"),("flavours","flavors"),
+    ("defence","defense"),("offence","offense"),("programme","program"),("programmes","programs"),
+    ("jewellery","jewelry"),("grey","gray"),("tyre","tire"),("tyres","tires")]:
+    SPELLINGS[uk]=us
+
 def tokens(text):
     text=unicodedata.normalize("NFKC",text).casefold().replace("’","'")
     words=re.findall(r"[a-z0-9]+(?:'[a-z]+)?",text)
     expansions={"i'm":["i","am"],"it's":["it","is"],"we're":["we","are"],"they're":["they","are"],"you're":["you","are"],"don't":["do","not"],"didn't":["did","not"],"can't":["can","not"],"couldn't":["could","not"],"won't":["will","not"],"that's":["that","is"],"i've":["i","have"],"we've":["we","have"],"i'll":["i","will"],"we'll":["we","will"]}
-    return [token for word in words for token in expansions.get(word,number_tokens(word))]
+    return [SPELLINGS.get(token,token) for word in words for token in expansions.get(word,number_tokens(word))]
 
 def edits(reference,hypothesis):
     a,b=tokens(reference),tokens(hypothesis)
