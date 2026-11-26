@@ -17,10 +17,25 @@ if engine == "pocket":
         sf.write(path, audio.detach().cpu().numpy(), model.sample_rate)
 elif engine == "kitten":
     from kitten_tts_cpp import KittenTTS
-    model = KittenTTS("KittenML/kitten-tts-2", decoder="student_w4", threads=2)
+    model = KittenTTS("KittenML/kitten-tts-2", decoder="default", threads=4, repack=False)
     voices = {"A": "Bella", "B": "Jasper"}
     def synth(text, role, path):
-        model.generate_to_file(text, str(path), voice=voices[role])
+        # C++ sampling can fail before waveform decoding. Keep text and voice fixed.
+        attempts = [
+            dict(temperature=0.8, top_p=0.8, top_k=50, advanced={"seed": 42}),
+            dict(temperature=0.8, top_p=1.0, top_k=100, min_p=0.0, advanced={"seed": 2718}),
+            dict(temperature=0.9, top_p=1.0, top_k=200, min_p=0.0, advanced={"seed": 31415}),
+        ]
+        for n, options in enumerate(attempts, 1):
+            try:
+                path.unlink(missing_ok=True)
+                model.generate_to_file(text, str(path), voice=voices[role], preset="stable", **options)
+                print(f"Kitten {path.name}: attempt {n} succeeded", flush=True)
+                return
+            except RuntimeError as exc:
+                if "no finite sampling candidates" not in str(exc).lower() or n == len(attempts):
+                    raise
+                print(f"Kitten {path.name}: attempt {n} failed: {exc}; retrying unchanged script and voice", flush=True)
 else:
     from chatterbox.tts_turbo import ChatterboxTurboTTS
     import torchaudio
@@ -50,27 +65,38 @@ for name, lines in scripts.items():
     if any(role not in voices for role,_ in lines):
         report["tracks"][name] = {"status":"skipped: second reference voice not configured"}
         continue
-    t = time.monotonic()
-    pieces = []
-    for i,(role,text) in enumerate(lines):
-        raw = out / f"{name}-{i:02d}-{role}.wav"
-        synth(text,role,raw)
-        normalized = raw.with_suffix(".pcm.wav")
-        ff("-i",raw,"-ac","1","-ar","24000","-c:a","pcm_s16le",normalized)
-        data,sr = sf.read(normalized,dtype="float32")
-        assert len(data) > sr*0.25 and np.isfinite(data).all() and np.max(np.abs(data)) > .001, f"Invalid audio: {raw}"
-        pieces.append(data)
-        normalized.unlink()
-        if i+1 < len(lines):
-            pieces.append(np.zeros(int(sr*.45),dtype=np.float32))
-    full = np.concatenate(pieces)
-    wave = out / f"{name}.wav"
-    sf.write(wave,full,24000)
-    mp3 = out / f"{name}.mp3"
-    ff("-i",wave,"-af","loudnorm=I=-18:TP=-2:LRA=7","-ar","24000","-ac","1","-c:a","libmp3lame","-b:a","96k",mp3)
-    word_count = sum(len(re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?",txt)) for _,txt in lines)
-    seconds = len(full)/24000
-    report["tracks"][name] = {"status":"generated; listening review required","duration_seconds":round(seconds,2),"words":word_count,"words_per_minute":round(word_count*60/seconds,1),"generation_seconds":round(time.monotonic()-t,2),"script":[{"role":role,"text":txt} for role,txt in lines]}
-    (out/"report.json").write_text(json.dumps(report,indent=2))
-    print(name,report["tracks"][name],flush=True)
+    try:
+        t = time.monotonic()
+        pieces = []
+        for i,(role,text) in enumerate(lines):
+            raw = out / f"{name}-{i:02d}-{role}.wav"
+            synth(text,role,raw)
+            normalized = raw.with_suffix(".pcm.wav")
+            ff("-i",raw,"-ac","1","-ar","24000","-c:a","pcm_s16le",normalized)
+            data,sr = sf.read(normalized,dtype="float32")
+            assert len(data) > sr*0.25 and np.isfinite(data).all() and np.max(np.abs(data)) > .001, f"Invalid audio: {raw}"
+            pieces.append(data)
+            normalized.unlink()
+            if i+1 < len(lines):
+                pieces.append(np.zeros(int(sr*.45),dtype=np.float32))
+        full = np.concatenate(pieces)
+        wave = out / f"{name}.wav"
+        sf.write(wave,full,24000)
+        mp3 = out / f"{name}.mp3"
+        ff("-i",wave,"-af","loudnorm=I=-18:TP=-2:LRA=7","-ar","24000","-ac","1","-c:a","libmp3lame","-b:a","96k",mp3)
+        word_count = sum(len(re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?",txt)) for _,txt in lines)
+        seconds = len(full)/24000
+        report["tracks"][name] = {"status":"generated; listening review required","duration_seconds":round(seconds,2),"words":word_count,"words_per_minute":round(word_count*60/seconds,1),"generation_seconds":round(time.monotonic()-t,2),"script":[{"role":role,"text":txt} for role,txt in lines]}
+        (out/"report.json").write_text(json.dumps(report,indent=2))
+        print(name,report["tracks"][name],flush=True)
+    except Exception as exc:
+        report["tracks"][name] = {"status":"failed","error":repr(exc),"script":[{"role":role,"text":txt} for role,txt in lines]}
+        (out/"report.json").write_text(json.dumps(report,indent=2))
+        print(f"{name}: FAILED {exc!r}",flush=True)
+        for suffix in (".wav",".mp3"):
+            (out/(name+suffix)).unlink(missing_ok=True)
+
 (out/"report.json").write_text(json.dumps(report,indent=2))
+
+if any(t["status"]=="failed" for t in report["tracks"].values()):
+    raise SystemExit("One or more tracks failed; see report.json. Successful tracks preserved.")
