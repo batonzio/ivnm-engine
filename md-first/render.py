@@ -19,6 +19,8 @@ def voice_config(line,production=False):
         raise ValueError("Rejected or disabled voice")
     if production and (cfg.get("status")!="approved" or not line.get("category") or cfg.get("category")!=line["category"]):
         raise ValueError("Production requires approved category voice")
+    if engine=="kitten" and ("reference_file" in cfg or "reference_hf" in cfg):
+        raise ValueError("Kitten C++ requires offline prepared voice assets; raw reference cloning is experimental and disabled in router")
     return cfg
 def ref_path(cfg):
     if "reference_file" in cfg:
@@ -58,8 +60,8 @@ def worker(engine,request,response):
         from chatterbox.tts_turbo import ChatterboxTurboTTS
         model=ChatterboxTurboTTS.from_pretrained(device="cpu"); sr=model.sr; default=model.conds
     elif engine=="kitten":
-        from kittenml import KittenTTS
-        model=KittenTTS("KittenML/kitten-tts-2",device="cpu"); sr=model.sample_rate
+        from kitten_tts_cpp import KittenTTS
+        model=KittenTTS("KittenML/kitten-tts-2",decoder="default",threads=4,repack=False); sr=model.sample_rate
     else: raise ValueError("Unknown engine")
     states={}; results={}
     for task in json.loads(request.read_text()):
@@ -81,13 +83,18 @@ def worker(engine,request,response):
                     else: raise ValueError("Chatterbox requires a registered reference")
                     audio=model.generate(text).detach().cpu().numpy()
                 else:
-                    kwargs={"reference":reference,"reference_text":cfg["reference_text"]} if reference else {"voice":cfg["voice"]}
-                    audio=model.generate(text,preset="expressive" if line.get("emotion","neutral")!="neutral" or line.get("emphasis") else "stable",**kwargs)
-                data,metrics=stats(audio,sr); sf.write(path,data,sr,subtype="PCM_24")
+                    if reference: raise ValueError("Raw reference is unsupported by Kitten C++")
+                    opts=[dict(temperature=0.8,top_p=0.8,top_k=50),dict(temperature=0.8,top_p=1.0,top_k=100,min_p=0.0),dict(temperature=0.9,top_p=1.0,top_k=200,min_p=0.0)][n-1]
+                    audio=model.generate(text,voice=cfg["voice"],preset="expressive" if line.get("emotion","neutral")!="neutral" or line.get("emphasis") else "stable",advanced={"seed":seed},**opts)
+                data,metrics=stats(audio,sr)
+                word_count=max(1,len(re.findall(r"[A-Za-z0-9]+(?:\x27[A-Za-z]+)?",line["text"])))
+                if metrics["seconds"]<max(.3,.14*word_count): raise ValueError(f"Truncated speech: {metrics}, words={word_count}")
+                sf.write(path,data,sr,subtype="PCM_24")
                 results[task["id"]]={"status":"generated","seed":seed,"attempts":attempts,**metrics}
                 break
             except Exception as exc:
                 attempts.append({"seed":seed,"error":repr(exc)})
+                print(engine,task["id"],"attempt",n,repr(exc),flush=True)
                 results[task["id"]]={"status":"failed","attempts":attempts}
         response.write_text(json.dumps(results,indent=2))
 def render(plan,output,production=False):

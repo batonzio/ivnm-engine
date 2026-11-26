@@ -2,11 +2,20 @@
 import math, re, unicodedata
 import numpy as np
 
+ONES="zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split()
+TENS="zero ten twenty thirty forty fifty sixty seventy eighty ninety".split()
+def number_tokens(word):
+    # Only unambiguous standalone decimal spellings 0..99, no leading zeroes.
+    if not re.fullmatch(r"(?:0|[1-9][0-9]?)",word): return [word]
+    n=int(word)
+    if n<20: return [ONES[n]]
+    return [TENS[n//10]]+([ONES[n%10]] if n%10 else [])
+
 def tokens(text):
     text=unicodedata.normalize("NFKC",text).casefold().replace("’","'")
     words=re.findall(r"[a-z0-9]+(?:'[a-z]+)?",text)
     expansions={"i'm":["i","am"],"it's":["it","is"],"we're":["we","are"],"they're":["they","are"],"you're":["you","are"],"don't":["do","not"],"didn't":["did","not"],"can't":["can","not"],"couldn't":["could","not"],"won't":["will","not"],"that's":["that","is"],"i've":["i","have"],"we've":["we","have"],"i'll":["i","will"],"we'll":["we","will"]}
-    return [token for word in words for token in expansions.get(word,[word])]
+    return [token for word in words for token in expansions.get(word,number_tokens(word))]
 
 def edits(reference,hypothesis):
     a,b=tokens(reference),tokens(hypothesis)

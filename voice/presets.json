@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "defaults": {
     "speed": 1,
     "quality": "studio",
@@ -120,7 +120,9 @@
       "native_direction": false,
       "native_emotion": true,
       "native_emphasis": true,
-      "verified_accent": false
+      "verified_accent": false,
+      "backend": "cpp",
+      "raw_reference_cloning": false
     }
   },
   "rejected_voices": {
@@ -164,5 +166,14 @@
       "feedback": "User rejected sound quality after casting round 1",
       "allow_fallback": false
     }
+  },
+  "routing_policy": {
+    "primary": "chatterbox",
+    "alternative": "pocket",
+    "expressive": "kitten",
+    "allow_voice_substitution": false,
+    "requires_approved_voice": true,
+    "kitten_backend": "cpp",
+    "kitten_raw_reference_cloning": "disabled_pending_prepared_assets"
   }
 }

@@ -1,8 +1,5 @@
 name: IVNM Audio QA - multi-take pilot
 on:
-  push:
-    branches: [main]
-    paths: ['audio-qa/**', '.github/workflows/audio-qa.yml']
   workflow_dispatch:
 permissions:
   contents: read

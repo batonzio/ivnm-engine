@@ -4,6 +4,11 @@ from quality import tokens,edits,signal,evaluate,select
 class QualityTests(unittest.TestCase):
     def test_normalization(self):
         self.assertEqual(edits("I'm here. We don't know.","I am here, we do not know")["errors"],0)
+    def test_numeric_spelling(self):
+        self.assertEqual(edits("half past ten","half past 10")["errors"],0)
+        self.assertEqual(edits("twenty-five minutes","25 minutes")["errors"],0)
+        self.assertNotEqual(edits("half past ten","half past 11")["errors"],0)
+        self.assertNotEqual(edits("seven","07")["errors"],0)
     def test_missing_and_added(self):
         self.assertEqual(edits("one two three","one three")["deletions"],1)
         self.assertEqual(edits("one two","one two three")["insertions"],1)
