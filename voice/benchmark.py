@@ -10,7 +10,7 @@ start = time.monotonic()
 if engine == "pocket":
     from pocket_tts import TTSModel
     model = TTSModel.load_model()
-    voices = {"A": "alba", "B": "marius"}
+    voices = {"A": "alba", "B": "charles"}
     states = {v: model.get_state_for_audio_prompt(v) for v in voices.values()}
     def synth(text, role, path):
         audio = model.generate_audio(states[voices[role]], text)
@@ -18,16 +18,24 @@ if engine == "pocket":
 elif engine == "kitten":
     from kitten_tts_cpp import KittenTTS
     model = KittenTTS("KittenML/kitten-tts-2", decoder="student_w4", threads=2)
-    voices = {"A": "Bella", "B": "Bruno"}
+    voices = {"A": "Bella", "B": "Jasper"}
     def synth(text, role, path):
         model.generate_to_file(text, str(path), voice=voices[role])
 else:
     from chatterbox.tts_turbo import ChatterboxTurboTTS
     import torchaudio
     model = ChatterboxTurboTTS.from_pretrained(device="cpu")
-    voices = {"A": "default"}
+    from huggingface_hub import hf_hub_download
+    voices = {"A": "default", "B": "charles_vctk"}
+    default_conds = model.conds
+    reference = hf_hub_download(repo_id="kyutai/tts-voices", filename="vctk/p254_023_enhanced.wav")
     def synth(text, role, path):
-        torchaudio.save(str(path), model.generate(text).detach().cpu(), model.sr)
+        if role == "A":
+            model.conds = default_conds
+            audio = model.generate(text)
+        else:
+            audio = model.generate(text, audio_prompt_path=reference)
+        torchaudio.save(str(path), audio.detach().cpu(), model.sr)
 load_seconds = time.monotonic()-start
 scripts = {
     "vocabulary": [("A","Cupboard. Comfortable. Thought. Through. Clothes. Furniture. Temperature. Adventure.")],
@@ -35,7 +43,7 @@ scripts = {
     "dialogue": [("A","Hi, are you still coming to the exhibition tomorrow?"),("B","Yes, of course. What time does it start?"),("A","At half past ten, but we could meet outside the station at ten."),("B","That sounds great. Shall we have lunch afterwards?"),("A","Good idea. There's a little cafe opposite the museum."),("B","Perfect. See you tomorrow!")],
     "celpip_notice": [("A","Good morning. This is a reminder that the community centre will close early on Friday because of maintenance."),("A","The evening swimming lesson has been moved to Saturday at quarter past nine. If you cannot attend, please contact the reception desk before Thursday."),("A","You can choose a different class or request a refund. Thank you for your patience.")]
 }
-report = {"engine":engine,"quality_gate":"signal only; human audition required","voices":voices,"speed":"native 1x; no time stretching","accent":"unverified","load_seconds":round(load_seconds,2),"tracks":{}}
+report = {"engine":engine,"quality_gate":"candidate voices; manual listening approval required","voices":voices,"speed":"native 1x; no time stretching","accent":"unverified","load_seconds":round(load_seconds,2),"tracks":{}}
 def ff(*args):
     subprocess.run(["ffmpeg","-nostdin","-hide_banner","-loglevel","error","-y",*map(str,args)],check=True)
 for name, lines in scripts.items():

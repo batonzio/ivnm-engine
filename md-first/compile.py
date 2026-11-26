@@ -43,6 +43,7 @@ def compile_md(path):
             if expressive and not cap["native_direction"]: reasons.add("Native instruction conditioning not available for selected voice")
             if accent and voice["accent"] != accent: reasons.add("Requested accent has not been verified")
             if not cap["enabled"]: reasons.add("Engine not enabled")
+            if voice.get("status") == "rejected" or voice["voice"] in PRESETS.get("rejected_voices",{}).get(voice["engine"],[]): reasons.add("Voice rejected by listening review")
             lines.append({"speaker":speaker,"voice":voice["voice"],"engine":voice["engine"],"text":text,"pause_after_ms":pause,"direction":" ".join(filter(None,[profile["direction"],direction,local])),"emotion":emotion,"emphasis":turn.get("emphasis",[])})
         if not lines: raise ValueError("Script is empty")
         if opts["takes"] != 1: reasons.add("Multi-take selection not implemented yet")

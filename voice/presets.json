@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "defaults": {
     "speed": 1,
     "quality": "studio",
@@ -49,7 +49,21 @@
       "engine": "pocket",
       "voice": "marius",
       "accent": "unverified",
-      "status": "experimental"
+      "status": "rejected"
+    },
+    "charles": {
+      "engine": "pocket",
+      "voice": "charles",
+      "accent": "unverified",
+      "status": "candidate",
+      "source": "CSTR VCTK Corpus 0.92, University of Edinburgh, CC BY 4.0, via Kyutai"
+    },
+    "paul": {
+      "engine": "pocket",
+      "voice": "paul",
+      "accent": "unverified",
+      "status": "candidate",
+      "source": "CSTR VCTK Corpus 0.92, University of Edinburgh, CC BY 4.0, via Kyutai"
     }
   },
   "capabilities": {
@@ -68,5 +82,28 @@
       "verified_accent": false,
       "enabled": false
     }
+  },
+  "rejected_voices": {
+    "pocket": [
+      "marius"
+    ],
+    "kitten": [
+      "Bruno"
+    ],
+    "chatterbox": [
+      "marius"
+    ]
+  },
+  "dialogue_candidates": {
+    "pocket": [
+      "charles",
+      "paul"
+    ],
+    "kitten": [
+      "Jasper"
+    ],
+    "chatterbox": [
+      "charles_vctk"
+    ]
   }
 }

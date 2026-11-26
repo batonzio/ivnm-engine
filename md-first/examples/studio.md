@@ -11,7 +11,7 @@ quality: studio
 accent: British RP
 direction: "Two friends are discussing a strange event. Keep the acting subtle and realistic."
 speakers:
-  Oliver: marius
+  Oliver: charles
   Emily: alba
 script:
   - speaker: Oliver
@@ -36,7 +36,7 @@ quality: draft
 takes: 1
 speakers:
   A: alba
-  B: marius
+  B: charles
 script:
   - speaker: A
     text: "Is there a desk next to your bed?"

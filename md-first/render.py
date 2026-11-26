@@ -6,7 +6,10 @@ from pocket_tts import TTSModel
 
 def render(plan, output):
     output.mkdir(parents=True,exist_ok=True)
+    presets=json.loads((pathlib.Path(__file__).resolve().parents[1]/"voice/presets.json").read_text())
+    rejected=presets.get("rejected_voices",{})
     ready = [t for t in plan["tracks"] if t["status"] == "ready"]
+    if any(l["voice"] in rejected.get(l["engine"],[]) for t in ready for l in t["lines"]): raise ValueError("Rejected voice in render plan; recompile Markdown")
     if not ready: raise RuntimeError("No renderable tracks")
     model=TTSModel.load_model()
     states={}
