@@ -1,0 +1,62 @@
+name: IVNM unified MD router - three engine smoke
+on:
+  push:
+    branches: [main]
+    paths: ['md-first/**', '.github/workflows/md-router.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [pocket, chatterbox, kitten]
+    env:
+      CUDA_VISIBLE_DEVICES: ''
+      OMP_NUM_THREADS: '4'
+      ENGINE: ${{ matrix.engine }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Compile all three engine scenarios
+        run: |
+          python -m pip install PyYAML
+          python md-first/test_voice_bank.py
+          python md-first/compile.py md-first/examples/router.md out/all.json
+          python - <<'PY'
+          import json, os
+          p=json.load(open('out/all.json'))
+          assert len(p['tracks'])==3 and all(t['status']=='ready' for t in p['tracks']),p
+          p['tracks']=[t for t in p['tracks'] if t['id']==os.environ['ENGINE']+'-smoke']
+          json.dump(p,open('out/plan.json','w'),indent=2)
+          PY
+      - name: Install isolated CPU runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          if [ "$ENGINE" = chatterbox ]; then
+            python -m pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+            python -m pip install chatterbox-tts==0.1.7 soundfile --extra-index-url https://download.pytorch.org/whl/cpu
+          elif [ "$ENGINE" = kitten ]; then
+            python -m pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+            python -m pip install kittenml soundfile --extra-index-url https://download.pytorch.org/whl/cpu
+          else
+            python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+            python -m pip install pocket-tts==4.0.1 soundfile
+          fi
+          python -m pip freeze > out/dependencies.txt
+      - name: Render through unified router
+        run: python md-first/render.py out/plan.json out
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: router-${{ matrix.engine }}-${{ github.run_id }}
+          path: out/
+          retention-days: 14

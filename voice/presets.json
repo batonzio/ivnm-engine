@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "defaults": {
     "speed": 1,
     "quality": "studio",
@@ -64,6 +64,34 @@
       "accent": "unverified",
       "status": "candidate",
       "source": "CSTR VCTK Corpus 0.92, University of Edinburgh, CC BY 4.0, via Kyutai"
+    },
+    "chatterbox_default": {
+      "engine": "chatterbox",
+      "voice": "default",
+      "accent": "unverified",
+      "status": "candidate"
+    },
+    "chatterbox_charles": {
+      "engine": "chatterbox",
+      "voice": "charles_vctk",
+      "accent": "unverified",
+      "status": "candidate",
+      "reference_hf": {
+        "repo": "kyutai/tts-voices",
+        "filename": "vctk/p254_023_enhanced.wav"
+      }
+    },
+    "kitten_bella": {
+      "engine": "kitten",
+      "voice": "Bella",
+      "accent": "unverified",
+      "status": "candidate"
+    },
+    "kitten_jasper": {
+      "engine": "kitten",
+      "voice": "Jasper",
+      "accent": "unverified",
+      "status": "candidate"
     }
   },
   "capabilities": {
@@ -75,7 +103,7 @@
     "chatterbox": {
       "native_direction": false,
       "verified_accent": false,
-      "enabled": false
+      "enabled": true
     },
     "expressive": {
       "native_direction": true,
@@ -86,6 +114,13 @@
       "native_direction": true,
       "verified_accent": false,
       "enabled": false
+    },
+    "kitten": {
+      "enabled": true,
+      "native_direction": false,
+      "native_emotion": true,
+      "native_emphasis": true,
+      "verified_accent": false
     }
   },
   "rejected_voices": {

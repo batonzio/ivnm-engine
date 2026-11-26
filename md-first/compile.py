@@ -6,6 +6,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 PRESETS = json.loads((ROOT / "voice/presets.json").read_text(encoding="utf-8"))
 BANK = json.loads((ROOT / "voice/voice-bank.json").read_text(encoding="utf-8"))
 BLOCK = re.compile(r"^\s*```ivnm-voice[ \t]*\n(.*?)^\s*```[ \t]*$", re.M | re.S)
+EMOTIONS={"angry","contemplative","excited","joyful","mundane","nervous","sad","stern","surprised","tender"}
 ID = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$")
 
 def compile_md(path):
@@ -21,12 +22,14 @@ def compile_md(path):
             raise ValueError(f"Invalid or duplicate track id: {track_id}")
         seen.add(track_id)
         profile = PRESETS["profiles"][data["profile"]]
-        opts = PRESETS["defaults"] | {k:data[k] for k in ("quality","takes","speed") if k in data}
+        opts = PRESETS["defaults"] | {k:data[k] for k in ("quality","takes","speed","direction_mode") if k in data}
         if opts["speed"] != 1: raise ValueError("Only native speed 1.0 is supported")
         if not isinstance(opts["takes"],int) or not 1 <= opts["takes"] <= 10: raise ValueError("takes must be 1-10")
+        direction_mode=opts.get("direction_mode","strict")
+        if direction_mode not in ("strict","advisory"): raise ValueError("Invalid direction_mode")
         speakers = data["speakers"]
         if not isinstance(speakers,dict) or not speakers: raise ValueError("speakers must be a nonempty mapping")
-        voices = {}
+        voices, voice_keys = {}, {}
         for name, selector in speakers.items():
             if isinstance(selector, str) and selector in BANK["slots"]:
                 selector = {"category":selector}
@@ -36,14 +39,16 @@ def compile_md(path):
                 variant=selector.get("variant","primary")
                 if variant not in ("primary","alternate"): raise ValueError("Unknown voice variant")
                 key=slot[variant]
+                voice_keys[name]=key
                 voice=PRESETS["voices"].get(key,{})
                 verified=(voice.get("status")=="approved" and voice.get("category")==category and voice.get("accent")==slot["accent"] and voice.get("age_group")==slot["age_group"] and voice.get("gender")==slot["gender"])
                 voices[name]=({**voice,"category":category,"category_direction":slot["direction"]} if verified else {"engine":"unassigned","voice":None,"accent":slot["accent"],"status":"pending_audition","category":category,"category_direction":slot["direction"]})
             else:
+                voice_keys[name]=selector
                 voices[name]=PRESETS["voices"][selector]
         direction = str(data.get("direction","")).strip()
         accent = data.get("accent")
-        lines, reasons = [], set()
+        lines, reasons, warnings = [], set(), set()
         for turn in data["script"]:
             speaker = turn["speaker"]
             voice = voices[speaker]
@@ -53,20 +58,26 @@ def compile_md(path):
             if not isinstance(pause,int) or not 0 <= pause <= 5000: raise ValueError("Pause must be 0-5000 ms")
             local = str(turn.get("direction","")).strip()
             emotion = str(turn.get("emotion","neutral"))
-            expressive = bool(profile["expressive"] or direction or local or emotion != "neutral" or turn.get("emphasis"))
+            emphasis=turn.get("emphasis",[])
+            if not isinstance(emphasis,list) or any(not isinstance(x,str) or not x or text.count(x)!=1 for x in emphasis): raise ValueError("Emphasis must be a list of unique exact phrases in spoken text")
+            if any(x in text for x in ("(((",")))","<laugh>","[joyful]")): raise ValueError("Use structured direction fields, not raw model tags")
+            expressive = bool(profile["expressive"] or direction or local)
             if voice["engine"] == "unassigned": reasons.add("No approved voice for category "+voice["category"])
             cap = PRESETS["capabilities"].get(voice["engine"],{"enabled":False,"native_direction":False})
-            if expressive and not cap["native_direction"]: reasons.add("Native instruction conditioning not available for selected voice")
+            if expressive and not cap["native_direction"]:
+                if direction_mode=="strict": reasons.add("Native instruction conditioning not available for selected voice")
+                else: warnings.add("Free-form direction is advisory; not synthesized as spoken text")
+            if emotion!="neutral" and (emotion not in EMOTIONS or not cap.get("native_emotion")): reasons.add("Unsupported structured emotion: "+emotion)
+            if emphasis and not cap.get("native_emphasis"): reasons.add("Unsupported structured emphasis")
             if accent and voice["accent"] != accent: reasons.add("Requested accent has not been verified")
             if not cap["enabled"]: reasons.add("Engine not enabled")
             if PRESETS.get("model_review",{}).get(voice["engine"],{}).get("status") == "rejected": reasons.add("Model rejected by listening review")
             if voice.get("status") == "rejected" or voice["voice"] in PRESETS.get("rejected_voices",{}).get(voice["engine"],[]): reasons.add("Voice rejected by listening review")
-            lines.append({"speaker":speaker,"voice":voice["voice"],"engine":voice["engine"],"text":text,"pause_after_ms":pause,"category":voice.get("category"),"direction":" ".join(filter(None,[voice.get("category_direction"),profile["direction"],direction,local])),"emotion":emotion,"emphasis":turn.get("emphasis",[])})
+            lines.append({"speaker":speaker,"voice_key":voice_keys[speaker],"voice_status":voice.get("status"),"voice":voice["voice"],"engine":voice["engine"],"text":text,"pause_after_ms":pause,"category":voice.get("category"),"direction":" ".join(filter(None,[voice.get("category_direction"),profile["direction"],direction,local])),"emotion":emotion,"emphasis":emphasis})
         if not lines: raise ValueError("Script is empty")
         if opts["takes"] != 1: reasons.add("Multi-take selection not implemented yet")
-        if len({l["engine"] for l in lines})!=1: reasons.add("Mixed-engine tracks not supported")
-        if len({l["voice"] for l in lines}) < len(speakers): reasons.add("Distinct speakers must have distinct voices")
-        tracks.append({"id":track_id,"lesson":data.get("lesson"),"slide":data.get("slide"),"profile":data["profile"],"accent":accent,"options":opts,"lines":lines,"status":"blocked" if reasons else "ready","reasons":sorted(reasons)})
+        if len({(l["engine"],l["voice"]) for l in lines}) < len({l["speaker"] for l in lines}): reasons.add("Distinct speakers must have distinct voices")
+        tracks.append({"id":track_id,"lesson":data.get("lesson"),"slide":data.get("slide"),"profile":data["profile"],"accent":accent,"options":opts,"lines":lines,"status":"blocked" if reasons else "ready","reasons":sorted(reasons),"warnings":sorted(warnings)})
     return {"schema":1,"tracks":tracks}
 
 def main():
