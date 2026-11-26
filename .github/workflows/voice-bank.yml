@@ -1,0 +1,28 @@
+name: IVNM Voice Bank matrix validation
+on:
+  push:
+    branches: [main]
+    paths: ['voice/voice-bank.json', 'voice/presets.json', 'md-first/**', '.github/workflows/voice-bank.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m pip install PyYAML
+          python md-first/test_voice_bank.py
+          python md-first/compile.py md-first/examples/voice-matrix.md out/matrix-plan.json
+      - uses: actions/upload-artifact@v6
+        with:
+          name: voice-matrix-plan
+          path: out/matrix-plan.json
+          retention-days: 7

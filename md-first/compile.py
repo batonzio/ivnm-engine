@@ -4,6 +4,7 @@ import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PRESETS = json.loads((ROOT / "voice/presets.json").read_text(encoding="utf-8"))
+BANK = json.loads((ROOT / "voice/voice-bank.json").read_text(encoding="utf-8"))
 BLOCK = re.compile(r"^\s*```ivnm-voice[ \t]*\n(.*?)^\s*```[ \t]*$", re.M | re.S)
 ID = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$")
 
@@ -25,7 +26,21 @@ def compile_md(path):
         if not isinstance(opts["takes"],int) or not 1 <= opts["takes"] <= 10: raise ValueError("takes must be 1-10")
         speakers = data["speakers"]
         if not isinstance(speakers,dict) or not speakers: raise ValueError("speakers must be a nonempty mapping")
-        voices = {name: PRESETS["voices"][voice] for name,voice in speakers.items()}
+        voices = {}
+        for name, selector in speakers.items():
+            if isinstance(selector, str) and selector in BANK["slots"]:
+                selector = {"category":selector}
+            if isinstance(selector, dict):
+                category=selector["category"]
+                slot=BANK["slots"][category]
+                variant=selector.get("variant","primary")
+                if variant not in ("primary","alternate"): raise ValueError("Unknown voice variant")
+                key=slot[variant]
+                voice=PRESETS["voices"].get(key,{})
+                verified=(voice.get("status")=="approved" and voice.get("category")==category and voice.get("accent")==slot["accent"] and voice.get("age_group")==slot["age_group"] and voice.get("gender")==slot["gender"])
+                voices[name]=({**voice,"category":category,"category_direction":slot["direction"]} if verified else {"engine":"unassigned","voice":None,"accent":slot["accent"],"status":"pending_audition","category":category,"category_direction":slot["direction"]})
+            else:
+                voices[name]=PRESETS["voices"][selector]
         direction = str(data.get("direction","")).strip()
         accent = data.get("accent")
         lines, reasons = [], set()
@@ -39,12 +54,13 @@ def compile_md(path):
             local = str(turn.get("direction","")).strip()
             emotion = str(turn.get("emotion","neutral"))
             expressive = bool(profile["expressive"] or direction or local or emotion != "neutral" or turn.get("emphasis"))
-            cap = PRESETS["capabilities"][voice["engine"]]
+            if voice["engine"] == "unassigned": reasons.add("No approved voice for category "+voice["category"])
+            cap = PRESETS["capabilities"].get(voice["engine"],{"enabled":False,"native_direction":False})
             if expressive and not cap["native_direction"]: reasons.add("Native instruction conditioning not available for selected voice")
             if accent and voice["accent"] != accent: reasons.add("Requested accent has not been verified")
             if not cap["enabled"]: reasons.add("Engine not enabled")
             if voice.get("status") == "rejected" or voice["voice"] in PRESETS.get("rejected_voices",{}).get(voice["engine"],[]): reasons.add("Voice rejected by listening review")
-            lines.append({"speaker":speaker,"voice":voice["voice"],"engine":voice["engine"],"text":text,"pause_after_ms":pause,"direction":" ".join(filter(None,[profile["direction"],direction,local])),"emotion":emotion,"emphasis":turn.get("emphasis",[])})
+            lines.append({"speaker":speaker,"voice":voice["voice"],"engine":voice["engine"],"text":text,"pause_after_ms":pause,"category":voice.get("category"),"direction":" ".join(filter(None,[voice.get("category_direction"),profile["direction"],direction,local])),"emotion":emotion,"emphasis":turn.get("emphasis",[])})
         if not lines: raise ValueError("Script is empty")
         if opts["takes"] != 1: reasons.add("Multi-take selection not implemented yet")
         if len({l["engine"] for l in lines})!=1: reasons.add("Mixed-engine tracks not supported")

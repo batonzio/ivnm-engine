@@ -1,0 +1,133 @@
+{
+  "schema": 1,
+  "required_categories": 12,
+  "desired_approved_per_category": 2,
+  "policy": {
+    "no_cross_category_fallback": true,
+    "manual_audition_required": true,
+    "reference_rights": "Use licensed synthetic or explicitly consented references; no identifiable minor recordings without appropriate consent and rights.",
+    "approval": "Accent, age impression, voice character and naturalness must be reviewed before mapping."
+  },
+  "slots": {
+    "UK-C-M": {
+      "accent": "British English",
+      "age_group": "child",
+      "perceived_age": "8-12",
+      "gender": "male",
+      "primary": null,
+      "alternate": null,
+      "status": "pending_audition",
+      "direction": "Natural British English male voice, perceived child age; clear authentic pronunciation, age-appropriate natural prosody, no forced pitch, hoarseness, metallic resonance or exaggerated acting."
+    },
+    "UK-C-F": {
+      "accent": "British English",
+      "age_group": "child",
+      "perceived_age": "8-12",
+      "gender": "female",
+      "primary": null,
+      "alternate": null,
+      "status": "pending_audition",
+      "direction": "Natural British English female voice, perceived child age; clear authentic pronunciation, age-appropriate natural prosody, no forced pitch, hoarseness, metallic resonance or exaggerated acting."
+    },
+    "UK-T-M": {
+      "accent": "British English",
+      "age_group": "teen",
+      "perceived_age": "13-17",
+      "gender": "male",
+      "primary": null,
+      "alternate": null,
+      "status": "pending_audition",
+      "direction": "Natural British English male voice, perceived teen age; clear authentic pronunciation, age-appropriate natural prosody, no forced pitch, hoarseness, metallic resonance or exaggerated acting."
+    },
+    "UK-T-F": {
+      "accent": "British English",
+      "age_group": "teen",
+      "perceived_age": "13-17",
+      "gender": "female",
+      "primary": null,
+      "alternate": null,
+      "status": "pending_audition",
+      "direction": "Natural British English female voice, perceived teen age; clear authentic pronunciation, age-appropriate natural prosody, no forced pitch, hoarseness, metallic resonance or exaggerated acting."
+    },
+    "UK-A-M": {
+      "accent": "British English",
+      "age_group": "adult",
+      "perceived_age": "18-55",
+      "gender": "male",
+      "primary": null,
+      "alternate": null,
+      "status": "pending_audition",
+      "direction": "Natural British English male voice, perceived adult age; clear authentic pronunciation, age-appropriate natural prosody, no forced pitch, hoarseness, metallic resonance or exaggerated acting."
+    },
+    "UK-A-F": {
+      "accent": "British English",
+      "age_group": "adult",
+      "perceived_age": "18-55",
+      "gender": "female",
+      "primary": null,
+      "alternate": null,
+      "status": "pending_audition",
+      "direction": "Natural British English female voice, perceived adult age; clear authentic pronunciation, age-appropriate natural prosody, no forced pitch, hoarseness, metallic resonance or exaggerated acting."
+    },
+    "CA-C-M": {
+      "accent": "Canadian English",
+      "age_group": "child",
+      "perceived_age": "8-12",
+      "gender": "male",
+      "primary": null,
+      "alternate": null,
+      "status": "pending_audition",
+      "direction": "Natural Canadian English male voice, perceived child age; clear authentic pronunciation, age-appropriate natural prosody, no forced pitch, hoarseness, metallic resonance or exaggerated acting."
+    },
+    "CA-C-F": {
+      "accent": "Canadian English",
+      "age_group": "child",
+      "perceived_age": "8-12",
+      "gender": "female",
+      "primary": null,
+      "alternate": null,
+      "status": "pending_audition",
+      "direction": "Natural Canadian English female voice, perceived child age; clear authentic pronunciation, age-appropriate natural prosody, no forced pitch, hoarseness, metallic resonance or exaggerated acting."
+    },
+    "CA-T-M": {
+      "accent": "Canadian English",
+      "age_group": "teen",
+      "perceived_age": "13-17",
+      "gender": "male",
+      "primary": null,
+      "alternate": null,
+      "status": "pending_audition",
+      "direction": "Natural Canadian English male voice, perceived teen age; clear authentic pronunciation, age-appropriate natural prosody, no forced pitch, hoarseness, metallic resonance or exaggerated acting."
+    },
+    "CA-T-F": {
+      "accent": "Canadian English",
+      "age_group": "teen",
+      "perceived_age": "13-17",
+      "gender": "female",
+      "primary": null,
+      "alternate": null,
+      "status": "pending_audition",
+      "direction": "Natural Canadian English female voice, perceived teen age; clear authentic pronunciation, age-appropriate natural prosody, no forced pitch, hoarseness, metallic resonance or exaggerated acting."
+    },
+    "CA-A-M": {
+      "accent": "Canadian English",
+      "age_group": "adult",
+      "perceived_age": "18-55",
+      "gender": "male",
+      "primary": null,
+      "alternate": null,
+      "status": "pending_audition",
+      "direction": "Natural Canadian English male voice, perceived adult age; clear authentic pronunciation, age-appropriate natural prosody, no forced pitch, hoarseness, metallic resonance or exaggerated acting."
+    },
+    "CA-A-F": {
+      "accent": "Canadian English",
+      "age_group": "adult",
+      "perceived_age": "18-55",
+      "gender": "female",
+      "primary": null,
+      "alternate": null,
+      "status": "pending_audition",
+      "direction": "Natural Canadian English female voice, perceived adult age; clear authentic pronunciation, age-appropriate natural prosody, no forced pitch, hoarseness, metallic resonance or exaggerated acting."
+    }
+  }
+}
