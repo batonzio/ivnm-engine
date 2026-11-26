@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "defaults": {
+    "speed": 1,
+    "quality": "studio",
+    "takes": 3,
+    "output": {
+      "mp3_kbps": 128,
+      "lufs": -18,
+      "true_peak": -2
+    },
+    "engine": "auto"
+  },
+  "profiles": {
+    "school_dialogue": {
+      "direction": "Conversational, clear articulation, natural reactions; no theatrical acting.",
+      "pause_ms": 320,
+      "expressive": true
+    },
+    "school_narration": {
+      "direction": "Natural storytelling, meaningful phrasing, clear connected speech.",
+      "pause_ms": 450,
+      "expressive": true
+    },
+    "exam_notice": {
+      "direction": "Professional, intelligible, measured but natural announcement.",
+      "pause_ms": 480,
+      "expressive": true
+    },
+    "vocabulary": {
+      "direction": "Clear isolated pronunciation at native speed.",
+      "pause_ms": 700,
+      "expressive": false
+    },
+    "neutral_benchmark": {
+      "direction": "",
+      "pause_ms": 350,
+      "expressive": false
+    }
+  },
+  "voices": {
+    "alba": {
+      "engine": "pocket",
+      "voice": "alba",
+      "accent": "unverified",
+      "status": "experimental"
+    },
+    "marius": {
+      "engine": "pocket",
+      "voice": "marius",
+      "accent": "unverified",
+      "status": "experimental"
+    }
+  },
+  "capabilities": {
+    "pocket": {
+      "native_direction": false,
+      "verified_accent": false,
+      "enabled": true
+    },
+    "chatterbox": {
+      "native_direction": false,
+      "verified_accent": false,
+      "enabled": false
+    },
+    "expressive": {
+      "native_direction": true,
+      "verified_accent": false,
+      "enabled": false
+    }
+  }
+}
