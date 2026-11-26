@@ -1,0 +1,41 @@
+name: IVNM MD-first voice smoke test
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['md-first/**', '.github/workflows/md-voice.yml']
+permissions:
+  contents: read
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Compile and validate Markdown
+        run: |
+          python -m pip install PyYAML
+          python md-first/compile.py md-first/examples/studio.md out/plan.json
+          python -c "import json; t=json.load(open('out/plan.json'))['tracks']; assert [x['status'] for x in t]==['blocked','ready']"
+      - name: Install CPU synthesis
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install pocket-tts==4.0.1 soundfile
+      - name: Render approved neutral track
+        run: python md-first/render.py out/plan.json out
+        env:
+          OMP_NUM_THREADS: '4'
+          CUDA_VISIBLE_DEVICES: ''
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: md-voice-${{ github.run_id }}
+          path: out/
+          retention-days: 7
