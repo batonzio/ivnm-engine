@@ -22,4 +22,29 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m compileall -q local_engines
-      - run: python -m unittest local_engines.test_adapters local_engines.test_foundation local_engines.test_resources local_engines.test_audio local_engines.test_compatibility local_engines.test_wordnet -v
+      - run: python -m unittest local_engines.test_adapters local_engines.test_foundation local_engines.test_resources local_engines.test_audio local_engines.test_compatibility local_engines.test_wordnet local_engines.test_responsive -v
+  real-fixtures:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated optional runtime
+        run: |
+          python -m pip install nltk==3.9.2 playwright==1.51.0
+          python -m pip check
+          python -m playwright install --with-deps chromium
+      - name: Provision verified WordNet 3.0 corpus
+        run: |
+          curl --fail --location --retry 2 --max-time 60 https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/wordnet.zip -o "$RUNNER_TEMP/wordnet.zip"
+          echo "cbda5ea6eef7f36a97a43d4a75f85e07fccbb4f23657d27b4ccbc93e2646ab59  $RUNNER_TEMP/wordnet.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/wordnet.zip" -d "$RUNNER_TEMP"
+          echo "IVNM_WORDNET_DIR=$RUNNER_TEMP/wordnet" >> "$GITHUB_ENV"
+      - name: Real corpus and browser smoke
+        env:
+          IVNM_BROWSER_SMOKE: '1'
+        run: python -m unittest local_engines.test_wordnet local_engines.test_responsive -v
