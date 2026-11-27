@@ -84,11 +84,21 @@ def synth(args):
     if cache and not retry:
         if read(args.out/"manifest.json").get("demo") is not True:raise ValueError("Line cache is preview only")
         tracks={t["id"]:t for t in read(args.out/"plan.json")["tracks"]}
+        added=[];known={t["id"] for t in tasks}
         for (track,index),group in line_cache.group(tasks).items():
             identity=line_cache.identity(group,tracks[track],args.cache_fingerprint)
             hit=line_cache.restore(cache,identity,group,args.out)
             if hit:
-                restored.update({t["id"]:t for t in hit})
+                for row in hit:
+                    restored[row["id"]]=row
+                    if row["id"] not in known:
+                        require_keys=("id","track","index","seed","line","voice","file","retry")
+                        added.append({k:row[k] for k in require_keys});known.add(row["id"])
+        if added:
+            # Keep retry.py's complete original task/result history; no synthesized fake rows.
+            all_tasks=read(args.out/"tasks.json")
+            tasks=tasks+added;all_tasks[args.engine]=tasks
+            write(args.out/"tasks.json",all_tasks)
     lookup_seconds=time.perf_counter()-lookup_start
     missing=[t for t in tasks if t["id"] not in restored]
     timing={"engine":args.engine,"cache_lookup_seconds":lookup_seconds,"cache_hit_takes":len(restored),"synthesis_calls":0,"model_load_seconds":0,"generation_seconds":0}
@@ -156,7 +166,7 @@ def synth(args):
     write(args.out/(("retry-" if retry else "")+"synth-timing-"+args.engine+".json"),timing)
 def judge(args):
     started=time.perf_counter()
-    timing={"asr_model_load_seconds":0,"speaker_model_load_seconds":0,"asr_seconds":0,"speaker_embedding_seconds":0,"cleanup_seconds":0,"mastering_seconds":0,"cache_save_seconds":0,"cache_saved_lines":0}
+    timing={"asr_model_load_seconds":0,"speaker_model_load_seconds":0,"asr_seconds":0,"speaker_embedding_seconds":0,"cleanup_seconds":0,"cache_cleaned_hits":0,"mastering_seconds":0,"cache_save_seconds":0,"cache_saved_lines":0}
     from quality import evaluate
     from faster_whisper import WhisperModel
     import torch,torchaudio
@@ -232,7 +242,13 @@ def judge(args):
                 try:
                     original=out/"takes"/trial["file"]
                     dest=cleaned/(trial["id"]+".wav")
-                    mark=time.perf_counter();post=cleanup(original,dest);timing["cleanup_seconds"]+=time.perf_counter()-mark
+                    mark=time.perf_counter()
+                    cached=trial.get("cached_postprocess")
+                    if cached is not None:
+                        if not dest.is_file() or sha(dest)!=cached["sha256"]:raise ValueError("Cached cleaned WAV hash mismatch")
+                        post=dict(cached);timing["cache_cleaned_hits"]+=1
+                    else:post=cleanup(original,dest)
+                    timing["cleanup_seconds"]+=time.perf_counter()-mark
                     wave,sr=sf.read(dest,dtype="float32")
                     transcript,words=transcribe(dest)
                     after=evaluate(wave,sr,line.get("qa_text",line["text"]),transcript)
