@@ -25,7 +25,9 @@
     "UK-T-F": {
       "primary": "UK-T-F-02-pocket",
       "alternate": null,
-      "status": "provisional_replacement_pending_listening"
+      "status": "provisional_replacement_fluency_issue_pending_engine_comparison",
+      "candidate_under_test": "UK-T-F-02-chatterbox",
+      "feedback": "User reports residual choppy, stutter-like synthetic articulation in Pocket candidate after minimal and soft-EQ processing. Do not treat as approved or assume whole engine defective."
     }
   }
 }

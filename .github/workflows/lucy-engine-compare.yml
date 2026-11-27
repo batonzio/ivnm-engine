@@ -1,0 +1,70 @@
+name: IVNM Lucy same-reference Pocket vs Chatterbox
+on:
+  push:
+    branches: [main]
+    paths: ['casting/lucy_engine_compare.py', 'casting/lucy-engine-audition.md', '.github/workflows/lucy-engine-compare.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  replacement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OMP_NUM_THREADS: '4'
+      CUDA_VISIBLE_DEVICES: ''
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15187344062'
+          run-id: '45977862112'
+          github-token: ${{ github.token }}
+          path: prior
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15142281688'
+          run-id: '45869947186'
+          github-token: ${{ github.token }}
+          path: review
+      - name: Prepare replacement and preserve other takes
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install numpy soundfile PyYAML
+          python casting/preferred_registry.py
+          python casting/lucy_engine_compare.py registry
+          python production/pipeline.py prepare --md casting/lucy-engine-audition.md --registry preferred-voices.json --assets review --demo
+          python casting/lucy_engine_compare.py stage
+      - name: Synthesize six Lucy takes in Chatterbox only
+        run: |
+          python -m venv /tmp/ivnm-chatter
+          /tmp/ivnm-chatter/bin/python -m pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-chatter/bin/python -m pip install chatterbox-tts==0.1.7 soundfile --extra-index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-chatter/bin/python -u production/pipeline.py synth --engine chatterbox
+          python casting/lucy_engine_compare.py merge
+      - name: Verify and master complete dialogue
+        run: |
+          python -m venv /tmp/ivnm-qa
+          /tmp/ivnm-qa/bin/python -m pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-qa/bin/python -m pip install faster-whisper speechbrain==1.0.3 numpy soundfile 'huggingface_hub<1.0'
+          /tmp/ivnm-qa/bin/python -u production/pipeline.py judge
+          python casting/lucy_engine_compare.py package
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: lucy-engine-comparison-${{ github.run_id }}
+          path: |
+            out/*.json
+            out/audio/
+            out/takes/
+            out/cleaned/
+            out/comparison/
+          retention-days: 14
