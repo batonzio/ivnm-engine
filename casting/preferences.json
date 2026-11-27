@@ -13,5 +13,27 @@
   "source_run": 45869947186,
   "individual_accent_age_approval": false,
   "allow_production_publish": false,
-  "notes": "User preferred these engines in general after audition; individual voices and variant order are provisional. No per-voice checkbox approval inferred."
+  "notes": "User preferred these engines in general after audition; individual voices and variant order are provisional. No per-voice checkbox approval inferred.",
+  "rejected_candidates": {
+    "UK-T-F-01-pocket": {
+      "reason": "User disliked Lucy in Speech Director audition 45975829128",
+      "status": "rejected_by_listening",
+      "scope": "specific candidate and engine, not all Pocket voices"
+    }
+  },
+  "category_overrides": {
+    "UK-T-F": {
+      "primary": "UK-T-F-02-pocket",
+      "alternate": null,
+      "status": "pocket_preferred_in_ab_listening_fluency_review_pending",
+      "candidate_under_test": "UK-T-F-02-chatterbox",
+      "feedback": "User reports residual choppy, stutter-like synthetic articulation in Pocket candidate after minimal and soft-EQ processing. Do not treat as approved or assume whole engine defective.",
+      "comparison": {
+        "preferred": "UK-T-F-02-pocket",
+        "other": "UK-T-F-02-chatterbox",
+        "run": 45979529126,
+        "feedback": "User preferred A (Pocket). Prior report of choppy articulation remains open; no full voice approval inferred."
+      }
+    }
+  }
 }

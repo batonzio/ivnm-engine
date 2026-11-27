@@ -1,0 +1,68 @@
+name: IVNM replace rejected Lucy voice only
+on:
+  push:
+    branches: [main]
+    paths: ['casting/replace_lucy.py', '.github/workflows/replace-lucy.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  replacement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OMP_NUM_THREADS: '4'
+      CUDA_VISIBLE_DEVICES: ''
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15188405075'
+          run-id: '45975829128'
+          github-token: ${{ github.token }}
+          path: prior
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15142281688'
+          run-id: '45869947186'
+          github-token: ${{ github.token }}
+          path: review
+      - name: Prepare replacement and preserve other takes
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install numpy soundfile PyYAML
+          python casting/preferred_registry.py
+          python production/pipeline.py prepare --md casting/director-audition.md --registry preferred-voices.json --assets review --demo
+          python casting/replace_lucy.py
+      - name: Synthesize only Lucy with alternate Pocket voice
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python -m venv /tmp/ivnm-pocket
+          /tmp/ivnm-pocket/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-pocket/bin/python -m pip install pocket-tts==4.0.1 soundfile
+          /tmp/ivnm-pocket/bin/python -u production/pipeline.py synth --engine pocket
+      - name: Verify and master complete dialogue
+        run: |
+          python -m venv /tmp/ivnm-qa
+          /tmp/ivnm-qa/bin/python -m pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-qa/bin/python -m pip install faster-whisper speechbrain==1.0.3 numpy soundfile 'huggingface_hub<1.0'
+          /tmp/ivnm-qa/bin/python -u production/pipeline.py judge
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: lucy-replacement-${{ github.run_id }}
+          path: |
+            out/*.json
+            out/audio/
+            out/takes/
+            out/cleaned/
+          retention-days: 14

@@ -1,0 +1,71 @@
+name: IVNM real cross-job line cache
+on:
+  pull_request:
+    branches: [engines/integration-candidate-v0.1]
+    types: [opened, synchronize, reopened]
+    paths: ['production/line_cache*.py','.github/workflows/audio-line-cache-audition.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  seed:
+    if: github.head_ref == 'engines/audio-handoff-v0.1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15187344062'
+          run-id: '45977862112'
+          github-token: ${{ github.token }}
+          path: prior
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15142281688'
+          run-id: '45869947186'
+          github-token: ${{ github.token }}
+          path: review
+      - run: |
+          python -m pip install numpy soundfile PyYAML
+          python production/line_cache_audition.py seed --prior prior --refs review --bundle bundle --artifact 15187344062
+      - uses: actions/upload-artifact@v6
+        with:
+          name: real-line-cache-${{ github.run_id }}
+          path: bundle/
+          retention-days: 14
+  replay:
+    needs: seed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v5
+        with:
+          name: real-line-cache-${{ github.run_id }}
+          path: bundle
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15142281688'
+          run-id: '45869947186'
+          github-token: ${{ github.token }}
+          path: review
+      - run: |
+          python -m pip install numpy soundfile PyYAML
+          python production/line_cache_audition.py replay --refs review --bundle bundle --fresh fresh
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: real-line-cache-report-${{ github.run_id }}
+          path: fresh/*.json
+          retention-days: 14

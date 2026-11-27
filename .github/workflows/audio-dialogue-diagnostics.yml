@@ -1,0 +1,53 @@
+name: IVNM dialogue continuity and ASR VAD benchmark
+on:
+  pull_request:
+    branches: [engines/integration-candidate-v0.1]
+    types: [opened, synchronize, reopened]
+    paths: ['production/dialogue_diagnostics.py','.github/workflows/audio-dialogue-diagnostics.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnostics:
+    if: github.head_ref == 'engines/audio-handoff-v0.1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      OMP_NUM_THREADS: '4'
+      CUDA_VISIBLE_DEVICES: ''
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15187344062'
+          run-id: '45977862112'
+          github-token: ${{ github.token }}
+          path: pocket
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15188004982'
+          run-id: '45979529126'
+          github-token: ${{ github.token }}
+          path: chatterbox
+      - name: Measure existing dialogues without TTS
+        run: |
+          start=$(date +%s)
+          python -m pip install numpy soundfile faster-whisper==1.2.1 'huggingface_hub<1.0'
+          echo "$(( $(date +%s)-start ))" > diagnostics-environment-seconds.txt
+          python -m pip freeze | sort > diagnostics-runtime.txt
+          python production/dialogue_diagnostics.py pocket chatterbox dialogue-report.json
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: dialogue-diagnostics-${{ github.run_id }}
+          path: |
+            dialogue-report.json
+            diagnostics-environment-seconds.txt
+            diagnostics-runtime.txt
+          retention-days: 14
