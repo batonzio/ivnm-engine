@@ -1,0 +1,102 @@
+name: IVNM targeted retry - contracts and real Pocket repair
+on:
+  push:
+    branches: [main]
+    paths: ['production/retry.py', 'production/test_retry.py', '.github/workflows/targeted-retry.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OMP_NUM_THREADS: '4'
+      CUDA_VISIBLE_DEVICES: ''
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15187344062'
+          run-id: '45977862112'
+          github-token: ${{ github.token }}
+          path: out
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15142281688'
+          run-id: '45869947186'
+          github-token: ${{ github.token }}
+          path: review
+      - name: Retry contract tests and controlled failure fixture
+        run: |
+          python -m unittest discover -s production -p 'test_retry.py' -v
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python - <<'PY'
+          import hashlib,json,pathlib
+          root=pathlib.Path("out")
+          for p in [root/"tasks.json", *root.glob("synth-*.json")]:
+              data=json.loads(p.read_text())
+              rows=[r for arr in data.values() for r in arr] if p.name=="tasks.json" else data
+              for r in rows:
+                  v=r["voice"]
+                  if v.get("reference_file"):
+                      f=pathlib.Path("review/refs")/pathlib.Path(v["reference_file"]).name
+                      assert hashlib.sha256(f.read_bytes()).hexdigest()==v["reference_sha256"]
+                      v["reference_file"]=str(f.resolve())
+                  if p.name=="synth-pocket.json" and r["index"]==1:
+                      r["status"]="failed"
+                      r["error"]="Controlled CI fixture: withhold otherwise valid takes; no original audio modified"
+              p.write_text(json.dumps(data))
+          PY
+          find out/takes -name '*.wav' -print0 | sort -z | xargs -0 sha256sum > original-takes.sha256
+      - name: Install isolated QA and Pocket environments
+        run: |
+          python -m venv /tmp/ivnm-qa
+          /tmp/ivnm-qa/bin/python -m pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-qa/bin/python -m pip install faster-whisper speechbrain==1.0.3 numpy soundfile 'huggingface_hub<1.0'
+          python -m venv /tmp/ivnm-pocket
+          /tmp/ivnm-pocket/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-pocket/bin/python -m pip install pocket-tts==4.0.1 soundfile
+      - name: Judge controlled missing line
+        run: |
+          if /tmp/ivnm-qa/bin/python -u production/pipeline.py judge; then echo "Fixture must fail"; exit 1; fi
+          python production/retry.py plan
+          python - <<'PY'
+          import json
+          t=json.load(open("out/retry-tasks.json"))
+          assert len(t["pocket"])==2 and all(x["index"]==1 for x in t["pocket"])
+          assert not t["chatterbox"] and not t["kitten"]
+          PY
+      - name: Repair only the missing line, bounded retries
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          for round in 1 2; do
+            /tmp/ivnm-pocket/bin/python -u production/pipeline.py synth --engine pocket --retry
+            python production/retry.py merge
+            if /tmp/ivnm-qa/bin/python -u production/pipeline.py judge; then
+              sha256sum -c original-takes.sha256
+              exit 0
+            fi
+            python production/retry.py plan
+            python -c 'import json; p=json.load(open("out/retry-plan.json")); assert p["status"]=="ready"'
+          done
+          exit 1
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: targeted-repair-${{ github.run_id }}
+          path: |
+            out/*.json
+            out/audio/
+            out/cleaned/
+            original-takes.sha256
+          retention-days: 14

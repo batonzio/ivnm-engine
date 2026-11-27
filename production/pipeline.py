@@ -74,7 +74,11 @@ def synth(args):
     import torch,random
     renderer=load_module("renderer",ROOT/"md-first/render.py")
     torch.set_num_threads(4)
-    tasks=read(args.out/"tasks.json")[args.engine]
+    retry=getattr(args,"retry",False)
+    if retry:
+        state=read(args.out/"retry-plan.json")
+        if state["status"]!="ready" or state["tasks_sha256"]!=sha(args.out/"retry-tasks.json") or state["base_tasks_sha256"]!=sha(args.out/"tasks.json") or state["qa_sha256"]!=sha(args.out/"qa-report.json"):raise ValueError("Stale retry plan")
+    tasks=read(args.out/("retry-tasks.json" if retry else "tasks.json"))[args.engine]
     if not tasks:return
     if args.engine=="pocket":
         from pocket_tts import TTSModel
@@ -90,7 +94,9 @@ def synth(args):
     for t in tasks:
         line=t["line"]; cfg=t["voice"];key=line["voice_key"];seed=t["seed"]
         item={**t,"status":"failed"}
-        path=directory/t["file"];path.unlink(missing_ok=True)
+        path=directory/t["file"]
+        if retry and path.exists():raise ValueError("Retry must not overwrite a take")
+        path.unlink(missing_ok=True)
         try:
             random.seed(seed);np.random.seed(seed);torch.manual_seed(seed)
             text=renderer.spoken_text({**line,"text":line.get("synthesis_text",line["text"])})
@@ -118,7 +124,7 @@ def synth(args):
                 sf.write(path,raw,sr,subtype="PCM_24")
                 item.update(status="generated",sha256=sha(path))
         except Exception as exc:item["error"]=repr(exc)
-        results.append(item);write(args.out/("synth-"+args.engine+".json"),results)
+        results.append(item);write(args.out/(("retry-synth-" if retry else "synth-")+args.engine+".json"),results)
         print(t["id"],item["status"],item.get("error",""),flush=True)
 def judge(args):
     from quality import evaluate
@@ -224,7 +230,7 @@ def judge(args):
     write(out/"manifest.json",manifest)
     if failed:raise SystemExit("Missing acceptable take; no publication")
 def main():
-    p=argparse.ArgumentParser();p.add_argument("mode",choices=["prepare","synth","judge"]);p.add_argument("--md",type=pathlib.Path);p.add_argument("--out",type=pathlib.Path,default=pathlib.Path("out"));p.add_argument("--registry",type=pathlib.Path);p.add_argument("--assets",type=pathlib.Path,default=pathlib.Path("refs"));p.add_argument("--demo",action="store_true");p.add_argument("--engine",choices=["pocket","chatterbox","kitten"]);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument("mode",choices=["prepare","synth","judge"]);p.add_argument("--md",type=pathlib.Path);p.add_argument("--out",type=pathlib.Path,default=pathlib.Path("out"));p.add_argument("--registry",type=pathlib.Path);p.add_argument("--assets",type=pathlib.Path,default=pathlib.Path("refs"));p.add_argument("--demo",action="store_true");p.add_argument("--engine",choices=["pocket","chatterbox","kitten"]);p.add_argument("--retry",action="store_true");a=p.parse_args()
     if a.mode=="prepare":prepare(a)
     elif a.mode=="synth":synth(a)
     else:judge(a)
