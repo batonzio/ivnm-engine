@@ -1,0 +1,44 @@
+name: IVNM pinned synthetic reference bundle
+on:
+  push:
+    branches: [main]
+    paths: ['casting/export_reference_bundle.py', '.github/workflows/reference-bundle.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15142281688'
+          run-id: '45869947186'
+          github-token: ${{ github.token }}
+          path: review
+      - name: Verify and package synthetic source references
+        run: python casting/export_reference_bundle.py
+      - name: Publish versioned synthetic reference asset (no lesson data)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=synthetic-refs-v1
+          asset=ivnm-synthetic-references-v1.zip
+          if gh release view "$tag" >/dev/null 2>&1; then
+            mkdir -p existing
+            gh release download "$tag" --pattern "$asset" --dir existing
+            cmp "$asset" "existing/$asset"
+          else
+            gh release create "$tag" "$asset" --target "$GITHUB_SHA" --title "IVNM synthetic references v1 (provisional)" --notes "Synthetic audition source references and catalog only. No live lessons or personal data. Not an approved production voice bank." --prerelease
+          fi
+      - uses: actions/upload-artifact@v6
+        with:
+          name: synthetic-reference-bundle
+          path: ivnm-synthetic-references-v1.zip
+          retention-days: 14
