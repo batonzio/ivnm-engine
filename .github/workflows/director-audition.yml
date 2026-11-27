@@ -1,0 +1,79 @@
+name: IVNM Speech Director - real synthesis audition
+on:
+  push:
+    branches: [main]
+    paths: ['casting/director-audition.md', '.github/workflows/director-audition.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      OMP_NUM_THREADS: '4'
+      CUDA_VISIBLE_DEVICES: ''
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '15142281688'
+          run-id: '45869947186'
+          github-token: ${{ github.token }}
+          path: review
+      - name: Prepare and validate MD plan
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install numpy soundfile PyYAML
+          python -m unittest discover -s audio-qa -p 'test_*.py'
+          python md-first/test_voice_bank.py
+          python casting/preferred_registry.py
+          python production/pipeline.py prepare --md casting/director-audition.md --registry preferred-voices.json --assets review --demo
+          python -m unittest discover -s speech-director -p 'test_*.py' -v
+      - name: Pocket multiple takes
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python -m venv /tmp/ivnm-pocket
+          /tmp/ivnm-pocket/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-pocket/bin/python -m pip install pocket-tts==4.0.1 soundfile
+          /tmp/ivnm-pocket/bin/python -u production/pipeline.py synth --engine pocket
+          rm -rf /tmp/ivnm-pocket
+      - name: Chatterbox multiple takes
+        run: |
+          python -m venv /tmp/ivnm-chatter
+          /tmp/ivnm-chatter/bin/python -m pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-chatter/bin/python -m pip install chatterbox-tts==0.1.7 soundfile --extra-index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-chatter/bin/python -u production/pipeline.py synth --engine chatterbox
+          rm -rf /tmp/ivnm-chatter
+      - name: Kitten C++ expressive takes
+        run: |
+          python -m venv /tmp/ivnm-kitten
+          /tmp/ivnm-kitten/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-kitten/bin/python -m pip install kitten_tts_cpp==0.2.0 soundfile
+          /tmp/ivnm-kitten/bin/python -u production/pipeline.py synth --engine kitten
+          rm -rf /tmp/ivnm-kitten
+      - name: Independent ASR and speaker consistency
+        run: |
+          python -m venv /tmp/ivnm-qa
+          /tmp/ivnm-qa/bin/python -m pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          /tmp/ivnm-qa/bin/python -m pip install faster-whisper speechbrain==1.0.3 numpy soundfile 'huggingface_hub<1.0'
+          /tmp/ivnm-qa/bin/python -u production/pipeline.py judge
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: speech-director-audition-${{ github.run_id }}
+          path: |
+            out/*.json
+            out/audio/
+            out/takes/
+            out/cleaned/
+          retention-days: 14
