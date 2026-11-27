@@ -26,6 +26,9 @@ def registry(path,assets,demo=False):
             category=item["category"]; slot=bank["slots"][category]
             if item["engine"] not in ("chatterbox","pocket"):raise ValueError("Custom Kitten C++ assets not yet supported")
             key=item["key"]
+            rejected=read(ROOT/"casting/preferences.json").get("rejected_candidates",{})
+            if key in rejected or (item["engine"]=="pocket" and pathlib.Path(item["reference_file"]).name=="UK-T-F-01-ref.wav"):
+                raise ValueError("Voice rejected by user listening review")
             if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}",key) or key in presets["voices"]:raise ValueError("Invalid/duplicate key")
             ref=file_under(assets,item["reference_file"])
             if sha(ref)!=item["reference_sha256"]:raise ValueError("Reference checksum mismatch")
@@ -43,6 +46,9 @@ def prepare(args):
     out=args.out;out.mkdir(parents=True,exist_ok=True)
     compiler,presets,bank=registry(args.registry,args.assets,args.demo)
     plan=compiler.compile_md(args.md)
+    import yaml
+    director=load_module("speech_director",ROOT/"speech-director/director.py")
+    director.apply(plan,[yaml.safe_load(b) for b in compiler.BLOCK.findall(args.md.read_text(encoding="utf-8"))],presets["capabilities"])
     # Only this pipeline implements multiple takes. Other compiler gates remain intact.
     for t in plan["tracks"]:
         t["reasons"]=[r for r in t["reasons"] if r!="Multi-take selection not implemented yet"]
@@ -68,7 +74,11 @@ def synth(args):
     import torch,random
     renderer=load_module("renderer",ROOT/"md-first/render.py")
     torch.set_num_threads(4)
-    tasks=read(args.out/"tasks.json")[args.engine]
+    retry=getattr(args,"retry",False)
+    if retry:
+        state=read(args.out/"retry-plan.json")
+        if state["status"]!="ready" or state["tasks_sha256"]!=sha(args.out/"retry-tasks.json") or state["base_tasks_sha256"]!=sha(args.out/"tasks.json") or state["qa_sha256"]!=sha(args.out/"qa-report.json"):raise ValueError("Stale retry plan")
+    tasks=read(args.out/("retry-tasks.json" if retry else "tasks.json"))[args.engine]
     if not tasks:return
     if args.engine=="pocket":
         from pocket_tts import TTSModel
@@ -84,10 +94,12 @@ def synth(args):
     for t in tasks:
         line=t["line"]; cfg=t["voice"];key=line["voice_key"];seed=t["seed"]
         item={**t,"status":"failed"}
-        path=directory/t["file"];path.unlink(missing_ok=True)
+        path=directory/t["file"]
+        if retry and path.exists():raise ValueError("Retry must not overwrite a take")
+        path.unlink(missing_ok=True)
         try:
             random.seed(seed);np.random.seed(seed);torch.manual_seed(seed)
-            text=renderer.spoken_text(line)
+            text=renderer.spoken_text({**line,"text":line.get("synthesis_text",line["text"])})
             ref=cfg.get("reference_file")
             if ref and sha(pathlib.Path(ref))!=cfg["reference_sha256"]:raise ValueError("Reference changed")
             if not ref and cfg.get("reference_hf"):
@@ -107,12 +119,12 @@ def synth(args):
                 if ref:raise ValueError("Raw Kitten references disabled")
                 raw=model.generate(text,voice=cfg["voice"],preset="expressive" if line["emotion"]!="neutral" or line["emphasis"] else "stable",temperature=.8,top_p=1.,top_k=100,min_p=0.,advanced={"seed":seed})
             raw=np.asarray(raw,dtype=np.float32).reshape(-1)
-            item["signal"]=signal(raw,sr,line["text"])
+            item["signal"]=signal(raw,sr,line.get("qa_text",line["text"]))
             if item["signal"]["passed"]:
                 sf.write(path,raw,sr,subtype="PCM_24")
                 item.update(status="generated",sha256=sha(path))
         except Exception as exc:item["error"]=repr(exc)
-        results.append(item);write(args.out/("synth-"+args.engine+".json"),results)
+        results.append(item);write(args.out/(("retry-synth-" if retry else "synth-")+args.engine+".json"),results)
         print(t["id"],item["status"],item.get("error",""),flush=True)
 def judge(args):
     from quality import evaluate
@@ -157,8 +169,8 @@ def judge(args):
                     if sha(p)!=c["sha256"]:raise ValueError("Take checksum mismatch")
                     wave,sr=sf.read(p,dtype="float32")
                     transcript,words=transcribe(p)
-                    c["qa"]=evaluate(wave,sr,line["text"],transcript)
-                    c["fluency"]=repetition_report(line["text"],transcript,words)
+                    c["qa"]=evaluate(wave,sr,line.get("qa_text",line["text"]),transcript)
+                    c["fluency"]=repetition_report(line.get("qa_text",line["text"]),transcript,words)
                     if c["fluency"]["unexpected_repetitions"] and c["qa"]["lexical"]["errors"]:
                         c["qa"]["passed"]=False
                         c["qa"]["reasons"].append("Unexpected spoken repetition; reject rather than cut phonemes")
@@ -174,7 +186,7 @@ def judge(args):
             # speech, try the next already-generated passing take.
             winner=None;cleanpath=None
             while True:
-                trial=select(candidates)
+                trial=select(candidates,target_wpm=line.get("director",{}).get("target_wpm_for_take_ranking",150))
                 if trial is None:break
                 try:
                     original=out/"takes"/trial["file"]
@@ -182,8 +194,8 @@ def judge(args):
                     post=cleanup(original,dest)
                     wave,sr=sf.read(dest,dtype="float32")
                     transcript,words=transcribe(dest)
-                    after=evaluate(wave,sr,line["text"],transcript)
-                    trial["postprocess"]={**post,"qa":after,"fluency":repetition_report(line["text"],transcript,words)}
+                    after=evaluate(wave,sr,line.get("qa_text",line["text"]),transcript)
+                    trial["postprocess"]={**post,"qa":after,"fluency":repetition_report(line.get("qa_text",line["text"]),transcript,words)}
                     if not after["passed"]:raise ValueError("Cleaned transcript/signal failed")
                     trial["postprocess"]["raw_to_cleaned_cosine"]=float(embedding(original)@embedding(dest))
                     trial["postprocess"]["sha256"]=sha(dest)
@@ -193,6 +205,7 @@ def judge(args):
                     trial["qa"]["passed"]=False
                     trial["qa"]["reasons"].append("Postprocessing failed; try next take")
             detail={"speaker":line["speaker"],"voice_key":line["voice_key"],"text":line["text"],"direction":line["direction"],"emotion":line["emotion"],"emphasis":line["emphasis"],"takes":candidates,"selected_seed":winner["seed"] if winner else None}
+            if "director" in line:detail["director"]=line["director"];detail["synthesis_text"]=line["synthesis_text"]
             if winner:
                 p=cleanpath
                 wave,_=sf.read(p,dtype="float32");pieces.append(wave)
@@ -217,7 +230,7 @@ def judge(args):
     write(out/"manifest.json",manifest)
     if failed:raise SystemExit("Missing acceptable take; no publication")
 def main():
-    p=argparse.ArgumentParser();p.add_argument("mode",choices=["prepare","synth","judge"]);p.add_argument("--md",type=pathlib.Path);p.add_argument("--out",type=pathlib.Path,default=pathlib.Path("out"));p.add_argument("--registry",type=pathlib.Path);p.add_argument("--assets",type=pathlib.Path,default=pathlib.Path("refs"));p.add_argument("--demo",action="store_true");p.add_argument("--engine",choices=["pocket","chatterbox","kitten"]);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument("mode",choices=["prepare","synth","judge"]);p.add_argument("--md",type=pathlib.Path);p.add_argument("--out",type=pathlib.Path,default=pathlib.Path("out"));p.add_argument("--registry",type=pathlib.Path);p.add_argument("--assets",type=pathlib.Path,default=pathlib.Path("refs"));p.add_argument("--demo",action="store_true");p.add_argument("--engine",choices=["pocket","chatterbox","kitten"]);p.add_argument("--retry",action="store_true");a=p.parse_args()
     if a.mode=="prepare":prepare(a)
     elif a.mode=="synth":synth(a)
     else:judge(a)

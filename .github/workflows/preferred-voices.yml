@@ -1,8 +1,5 @@
 name: IVNM preferred voices - Spotlight 7 listening preview
 on:
-  push:
-    branches: [main]
-    paths: ['casting/preferences.json', 'casting/preferred_registry.py', 'casting/preferred-pilot.md', '.github/workflows/preferred-voices.yml']
   workflow_dispatch:
 permissions:
   contents: read

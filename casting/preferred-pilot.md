@@ -8,7 +8,7 @@ direction_mode: advisory
 takes: 3
 speakers:
   Alex: UK-T-M-01-chatterbox
-  Lucy: UK-T-F-01-pocket
+  Lucy: UK-T-F-02-pocket
 script:
   - speaker: Alex
     text: "Hi, Lucy. Are you looking for someone to help with the school magazine?"
