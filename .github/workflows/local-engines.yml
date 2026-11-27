@@ -22,4 +22,4 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m compileall -q local_engines
-      - run: python -m unittest local_engines.test_adapters local_engines.test_foundation local_engines.test_resources -v
+      - run: python -m unittest local_engines.test_adapters local_engines.test_foundation local_engines.test_resources local_engines.test_audio -v
