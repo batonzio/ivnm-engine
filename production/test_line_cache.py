@@ -30,6 +30,23 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(all(r["cache_hit"] and r["cached_preferred_seed"]==303 for r in got))
         for t in tasks:t["line"]["text"]="Good morning."
         self.assertIsNone(restore(self.cache,identity(tasks,self.track,"a"*64),tasks,fresh))
+    def test_pipeline_all_hit_never_loads_model(self):
+        import pipeline
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        save(self.cache,self.i,self.rows,self.w,self.out)
+        fresh=self.root/"fresh";fresh.mkdir()
+        pipeline.write(fresh/"manifest.json",{"demo":True})
+        pipeline.write(fresh/"plan.json",{"tracks":[{"id":"test",**self.track}]})
+        pipeline.write(fresh/"tasks.json",{"pocket":self.tasks,"chatterbox":[],"kitten":[]})
+        # Torch import is below cache resolution; a full hit must not reach renderer/model.
+        with patch.object(pipeline,"load_module",side_effect=AssertionError("TTS renderer loaded")):
+            pipeline.synth(SimpleNamespace(out=fresh,engine="pocket",retry=False,line_cache=self.cache,cache_fingerprint="a"*64))
+        report=pipeline.read(fresh/"synth-timing-pocket.json")
+        self.assertEqual(report["synthesis_calls"],0)
+        self.assertEqual(report["model_load_seconds"],0)
+        self.assertEqual(report["cache_hit_takes"],2)
+        self.assertEqual([r["sha256"] for r in pipeline.read(fresh/"synth-pocket.json")],[r["sha256"] for r in self.rows])
     def test_corrupt(self):
         save(self.cache,self.i,self.rows,self.w,self.out)
         obj(self.cache,self.w["sha256"]).write_bytes(b"damaged")
