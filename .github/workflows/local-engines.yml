@@ -1,0 +1,25 @@
+name: IVNM local engine adapter contracts
+on:
+  push:
+    branches: ['engines/local-adapters', main]
+    paths: ['local_engines/**', '.github/workflows/local-engines.yml']
+  pull_request:
+    paths: ['local_engines/**', '.github/workflows/local-engines.yml']
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        python: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m compileall -q local_engines
+      - run: python -m unittest local_engines.test_adapters -v
