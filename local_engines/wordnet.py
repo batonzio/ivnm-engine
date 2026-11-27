@@ -20,7 +20,18 @@ def open_local(directory):
     except ImportError:
         raise RuntimeError("Install the optional NLTK runtime explicitly") from None
     # OMW is not used. Avoid the default global corpus/download configuration.
-    reader = WordNetCorpusReader(str(root.resolve()), None)
+    class LocalEnglishReader(WordNetCorpusReader):
+        def map_wn(self, version="wordnet"):
+            # NLTK 3.9.2 otherwise resolves its global lazy WordNet corpus
+            # even for a separately provisioned 3.0 directory. The default
+            # 3.0-to-3.0 mapping is identity; multilingual mappings are disabled.
+            if self.get_version() != VERSION:
+                raise ValueError("Unsupported WordNet corpus version")
+            if version not in ("wordnet", VERSION):
+                raise ValueError("Cross-version mapping not supported")
+            return None
+
+    reader = LocalEnglishReader(str(root.resolve()), None)
     if reader.get_version() != VERSION:
         raise ValueError("Unsupported WordNet corpus version")
     return reader
