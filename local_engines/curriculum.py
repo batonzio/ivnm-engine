@@ -30,10 +30,12 @@ def plan(course_key, units, *, lesson_minutes, max_lessons, mastered=()):
     for u in normalized:
         if any(p not in seen and p not in known for p in u["prerequisites"]):
             raise ValueError("Unknown prerequisite")
+    # Explicitly scheduled units must still obey graph order, even if already mastered.
+    external_known=known-seen
     # Stable topological order, preserving input order where dependencies allow.
     remaining=list(normalized); scheduled=set(); ordered=[]
     while remaining:
-        ready=next((u for u in remaining if set(u["prerequisites"])<=known|scheduled),None)
+        ready=next((u for u in remaining if set(u["prerequisites"])<=external_known|scheduled),None)
         if ready is None: raise ValueError("Cyclic prerequisites")
         remaining.remove(ready); scheduled.add(ready["id"]); ordered.append(ready)
     total=sum(u["lessons"] for u in ordered)

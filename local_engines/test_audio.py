@@ -14,11 +14,11 @@ class AudioTests(unittest.TestCase):
         (self.root/"audio").mkdir()
         self.audio=self.root/"audio/t1.mp3"
         self.audio.write_bytes(b"synthetic bytes: not actual MP3")
-        self.write("qa-report.json",{"publication_allowed":False})
         self.manifest={"schema":1,"demo":False,"status":PASS,"publication_allowed":False,
-                       "qa_sha256":sha(self.root/"qa-report.json"),
                        "tracks":[{"id":"t1","lesson":"l1","slide":"s1","file":"audio/t1.mp3","status":PASS,
                                   "seconds":35.0,"sha256":sha(self.audio)}]}
+        self.write("qa-report.json",{"publication_allowed":False,"tracks":[{**self.manifest["tracks"][0],"lines":[{"selected_seed":101}]}]})
+        self.manifest["qa_sha256"]=sha(self.root/"qa-report.json")
         self.refresh()
 
     def write(self,name,data):

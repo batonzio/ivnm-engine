@@ -5,6 +5,16 @@ import json
 class EngineError(RuntimeError):
     """Safe failure; never includes the submitted text or raw remote response."""
 
+def strict_json(raw):
+    def unique(pairs):
+        result={}
+        for key,value in pairs:
+            if key in result: raise ValueError("Duplicate JSON key")
+            result[key]=value
+        return result
+    def invalid(_): raise ValueError("Nonfinite JSON")
+    return json.loads(raw,object_pairs_hook=unique,parse_constant=invalid)
+
 def post_json(port, path, body, content_type, timeout):
     if type(port) is not int or not 1 <= port <= 65535:
         raise ValueError("Invalid local port")
@@ -22,7 +32,7 @@ def post_json(port, path, body, content_type, timeout):
         if len(raw) > 2097152:
             raise EngineError("Local engine response exceeds limit")
         try:
-            data = json.loads(raw)
+            data = strict_json(raw)
         except (ValueError, UnicodeError):
             raise EngineError("Invalid local engine JSON") from None
         if not isinstance(data, dict):

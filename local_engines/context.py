@@ -22,8 +22,18 @@ def build(memory, scope, *, required_standards, course_key, budget=30000):
     progress = [r for r in rows if r["kind"]=="progress" and r["key"]==course_key and r["scope"]==scope]
     mandatory.extend(progress)
     # Optional material must belong to this course explicitly. Do not pull unrelated classes.
-    optional = [r for r in rows if r["kind"] in ("decision","resource")
-                and r["key"].startswith(course_key+".")]
+    course_keys={r["key"] for r in rows if r["kind"]=="course"}
+    def belongs(r):
+        if r["kind"]=="resource" and ".res." in r["key"]:
+            data=json.loads(r["content"])
+            if not isinstance(data,dict) or not isinstance(data.get("course_key"),str) or not isinstance(data.get("resource_id"),str):
+                raise ValueError("Invalid resource context record")
+            if r["key"]!=data["course_key"]+".res."+data["resource_id"]:
+                raise ValueError("Resource context key mismatch")
+            return data["course_key"]==course_key
+        owners=[k for k in course_keys if r["key"].startswith(k+".")]
+        return bool(owners) and max(owners,key=len)==course_key
+    optional = [r for r in rows if r["kind"] in ("decision","resource") and belongs(r)]
     def projection(r):
         return {k:r[k] for k in ("scope","kind","key","revision","title","content","digest")}
     selected = [projection(r) for r in mandatory]

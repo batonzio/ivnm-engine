@@ -12,6 +12,8 @@ def _validate(data):
     if not isinstance(data,dict) or set(data)!=fields or type(data["schema_version"]) is not int or data["schema_version"]!=1:
         raise ValueError("Invalid resource contract")
     identifier(data["resource_id"]); identifier(data["course_key"])
+    if any(".res." in data[k] for k in ("resource_id","course_key")):
+        raise ValueError("Reserved resource key separator")
     if data["kind"] not in KINDS: raise ValueError("Invalid resource kind")
     for key,limit in (("title",200),("description",2000),("license",100),("attribution",1000),("source",1000)):
         text_field(data[key],limit)

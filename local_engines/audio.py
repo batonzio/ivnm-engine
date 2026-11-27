@@ -102,6 +102,16 @@ def inspect_package(root, *, expected_bindings, minimum_seconds):
     tracks=manifest.get("tracks")
     if not isinstance(tracks,list) or len(tracks)!=len(expected_bindings):
         raise ValueError("Unexpected track count")
+    qa_tracks=qa_data.get("tracks")
+    if not isinstance(qa_tracks,list) or len(qa_tracks)!=len(tracks):
+        raise ValueError("QA track count mismatch")
+    qa_by_id={}
+    for record in qa_tracks:
+        if not isinstance(record,dict): raise ValueError("Invalid QA track")
+        key=identifier(record.get("id"))
+        if key in qa_by_id: raise ValueError("Duplicate QA track")
+        qa_by_id[key]=record
+    if set(qa_by_id)!=set(expected_bindings): raise ValueError("QA track set mismatch")
     seen=set(); bindings=set(); result=[]
     for t in tracks:
         key=identifier(t.get("id"))
@@ -116,6 +126,12 @@ def inspect_package(root, *, expected_bindings, minimum_seconds):
         seconds=t.get("seconds"); minimum=minimum_seconds[key]
         if any(type(v) not in (int,float) or not 0<v<=86400 or not math.isfinite(v) for v in (seconds,minimum)) or seconds<minimum:
             raise ValueError("Audio duration below requirement")
+        q=qa_by_id[key]
+        if any(q.get(field)!=t.get(field) for field in ("id","lesson","slide","status","file","sha256","seconds")):
+            raise ValueError("QA track disagrees with manifest")
+        lines=q.get("lines")
+        if not isinstance(lines,list) or not lines or any(not isinstance(line,dict) or type(line.get("selected_seed")) is not int for line in lines):
+            raise ValueError("Missing selected QA take")
         p=file_under(root,t["file"],67108864)
         checksum=digest(t.get("sha256"))
         if sha(p)!=checksum or reviewed[key]!=checksum:

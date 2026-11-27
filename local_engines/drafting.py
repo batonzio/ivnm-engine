@@ -1,7 +1,7 @@
 """Local Ollama draft adapter. Output is untrusted, never compiled or published here."""
 import json
 import re
-from .transport import EngineError, post_json, require_text
+from .transport import EngineError, post_json, require_text, strict_json
 
 DRAFT_SCHEMA = {"type": "object", "properties": {
     "title": {"type": "string"}, "rationale": {"type": "string"}, "markdown": {"type": "string"}},
@@ -22,7 +22,7 @@ def draft(prompt, context, *, model, port=11434, timeout=120):
     if raw.get("done") is not True or raw.get("done_reason") not in (None, "stop"):
         raise EngineError("Incomplete local draft")
     try:
-        data = json.loads(raw["message"]["content"])
+        data = strict_json(raw["message"]["content"])
         if not isinstance(data, dict) or set(data) != set(DRAFT_SCHEMA["required"]):
             raise ValueError("Invalid fields")
         for key, limit in (("title", 200), ("rationale", 12000), ("markdown", 100000)):
