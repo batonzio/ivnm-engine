@@ -1,0 +1,7 @@
+# Resource and Search Engines v0.1
+
+Resource Engine is a metadata layer over the existing Memory interface. No new database, file store or duplicate asset manager. Register assets with a SHA-256, source, attribution, declared license, CEFR levels and tags. A trusted caller approves records and supplies an explicit permitted-license list on every query. Scope and approval filters precede retrieval. The registry does not verify ownership, license terms or actual asset bytes; the existing asset manager remains responsible for file integrity, cache and materialization. Same-checksum grouping never discards source or attribution records. Production authorization remains the caller's responsibility.
+
+Search Engine provides deterministic lexical ranking and cosine semantic ranking over authorized resource candidates. Use a local Ollama /api/embed adapter to obtain embeddings. An integration-owned cache/index keyed by metadata_digest and pinned model fingerprint avoids re-embedding unchanged records. Missing/stale entries are explicitly reported, never silently mixed with other model versions. Fingerprints are supplied by the caller, not independently verified against weights. No cloud fallback. No external vector database, new service, or permanent index introduced here. A real local model and semantic quality benchmark remain pending; current tests use synthetic vectors and HTTP fixtures. For larger catalogs, use PostgreSQL/pgvector behind the same contract when justified.
+
+Run: python -m unittest local_engines.test_resources -v
