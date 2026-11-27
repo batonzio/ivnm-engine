@@ -61,7 +61,27 @@ class CacheTest(unittest.TestCase):
         self.w["postprocess"]["qa"]["lexical"]["errors"]=1
         self.assertFalse(save(self.cache,self.i,self.rows,self.w,self.out))
         self.assertIsNone(restore(self.cache,self.i,self.tasks,self.root/"fresh"))
-    def test_retry_group_not_yet_eligible(self):
-        extra=copy.deepcopy(self.tasks[0]);extra.update(seed=505,retry=True)
-        self.assertIsNone(identity(self.tasks+[extra],self.track,"a"*64))
+    def test_repaired_group_rehydrates_task_history_and_cleaned_winner(self):
+        import pipeline
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        extra=copy.deepcopy(self.tasks[0]);extra.update(seed=505,retry=True,id="test-000-r02",file="test-000-r02.wav")
+        raw=self.out/"takes"/extra["file"];raw.write_bytes(b"repaired raw")
+        clean=self.out/"cleaned"/extra["file"];clean.write_bytes(b"repaired clean")
+        q={"passed":True,"lexical":{"errors":0}}
+        winner={**extra,"status":"generated","sha256":file_hash(raw),"qa":q,"postprocess":{"qa":q,"sha256":file_hash(clean)}}
+        self.assertEqual(identity(self.tasks+[extra],self.track,"a"*64),self.i)
+        self.assertTrue(save(self.cache,self.i,self.rows+[winner],winner,self.out))
+        fresh=self.root/"fresh";fresh.mkdir()
+        pipeline.write(fresh/"manifest.json",{"demo":True})
+        pipeline.write(fresh/"plan.json",{"tracks":[{"id":"test",**self.track}]})
+        pipeline.write(fresh/"tasks.json",{"pocket":self.tasks,"chatterbox":[],"kitten":[]})
+        with patch.object(pipeline,"load_module",side_effect=AssertionError("TTS renderer loaded")):
+            pipeline.synth(SimpleNamespace(out=fresh,engine="pocket",retry=False,line_cache=self.cache,cache_fingerprint="a"*64))
+        rows=pipeline.read(fresh/"synth-pocket.json")
+        self.assertEqual(len(rows),3)
+        self.assertEqual(rows[-1]["cached_preferred_seed"],505)
+        self.assertEqual(file_hash(fresh/"cleaned"/extra["file"]),file_hash(clean))
+        self.assertEqual(pipeline.read(fresh/"tasks.json")["pocket"][-1],extra)
+        self.assertEqual(pipeline.read(fresh/"synth-timing-pocket.json")["synthesis_calls"],0)
 if __name__=="__main__":unittest.main()
