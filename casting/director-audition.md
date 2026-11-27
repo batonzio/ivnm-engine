@@ -10,7 +10,7 @@ scene: Two teenage friends arrange a meeting for a school project. A third frien
 takes: 3
 speakers:
   Alex: UK-T-M-01-chatterbox
-  Lucy: UK-T-F-01-pocket
+  Lucy: UK-T-F-02-pocket
   Lab: kitten_jasper
 script:
   - speaker: Alex

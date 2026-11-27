@@ -13,5 +13,19 @@
   "source_run": 45869947186,
   "individual_accent_age_approval": false,
   "allow_production_publish": false,
-  "notes": "User preferred these engines in general after audition; individual voices and variant order are provisional. No per-voice checkbox approval inferred."
+  "notes": "User preferred these engines in general after audition; individual voices and variant order are provisional. No per-voice checkbox approval inferred.",
+  "rejected_candidates": {
+    "UK-T-F-01-pocket": {
+      "reason": "User disliked Lucy in Speech Director audition 45975829128",
+      "status": "rejected_by_listening",
+      "scope": "specific candidate and engine, not all Pocket voices"
+    }
+  },
+  "category_overrides": {
+    "UK-T-F": {
+      "primary": "UK-T-F-02-pocket",
+      "alternate": null,
+      "status": "provisional_replacement_pending_listening"
+    }
+  }
 }

@@ -1,8 +1,5 @@
 name: IVNM Speech Director - real synthesis audition
 on:
-  push:
-    branches: [main]
-    paths: ['casting/director-audition.md', '.github/workflows/director-audition.yml']
   workflow_dispatch:
 permissions:
   contents: read

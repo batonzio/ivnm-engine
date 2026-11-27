@@ -26,6 +26,9 @@ def registry(path,assets,demo=False):
             category=item["category"]; slot=bank["slots"][category]
             if item["engine"] not in ("chatterbox","pocket"):raise ValueError("Custom Kitten C++ assets not yet supported")
             key=item["key"]
+            rejected=read(ROOT/"casting/preferences.json").get("rejected_candidates",{})
+            if key in rejected or (item["engine"]=="pocket" and pathlib.Path(item["reference_file"]).name=="UK-T-F-01-ref.wav"):
+                raise ValueError("Voice rejected by user listening review")
             if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}",key) or key in presets["voices"]:raise ValueError("Invalid/duplicate key")
             ref=file_under(assets,item["reference_file"])
             if sha(ref)!=item["reference_sha256"]:raise ValueError("Reference checksum mismatch")
